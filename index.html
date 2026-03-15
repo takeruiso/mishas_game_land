@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌈 ミシャのゲームランド 🌈</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    background: #0b0033;
+  }
+
+  /* ---- Animated sky background ---- */
+  .sky {
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(170deg, #1a0044 0%, #2d006b 30%, #5b0099 55%, #ff6ec7 85%, #ffb8de 100%);
+    z-index: 0;
+  }
+
+  .stars-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .twinkle {
+    position: absolute;
+    border-radius: 50%;
+    background: white;
+    animation: twinkle 2s ease-in-out infinite alternate;
+  }
+
+  @keyframes twinkle {
+    0% { opacity: .2; transform: scale(.8); }
+    100% { opacity: 1; transform: scale(1.2); }
+  }
+
+  /* ---- Floating shapes ---- */
+  .floater {
+    position: fixed;
+    font-size: 2rem;
+    opacity: .15;
+    pointer-events: none;
+    z-index: 1;
+    animation: floatAround 14s ease-in-out infinite alternate;
+  }
+
+  @keyframes floatAround {
+    0%   { transform: translateY(0) rotate(0deg); }
+    50%  { transform: translateY(-30px) rotate(15deg); }
+    100% { transform: translateY(10px) rotate(-10deg); }
+  }
+
+  /* ---- Main content ---- */
+  .content {
+    position: relative;
+    z-index: 2;
+    padding: 30px 20px 60px;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  /* ---- Header ---- */
+  .header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+
+  .logo {
+    display: inline-block;
+    position: relative;
+  }
+
+  .logo h1 {
+    font-size: 2.6rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, #ff6ec7, #ffd54f, #69f0ae, #40c4ff, #ea80fc);
+    background-size: 300% 300%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: gradientShift 4s ease infinite;
+    letter-spacing: 3px;
+    line-height: 1.3;
+  }
+
+  @keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  .logo .subtitle {
+    font-size: 1.05rem;
+    color: rgba(255, 255, 255, .6);
+    margin-top: 4px;
+    letter-spacing: 2px;
+    font-weight: 400;
+  }
+
+  .logo-deco {
+    font-size: 3.2rem;
+    display: block;
+    margin-bottom: 6px;
+    animation: bounce 2s ease-in-out infinite;
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+
+  /* ---- Game grid ---- */
+  .game-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 24px;
+    padding: 10px;
+  }
+
+  /* ---- Game card ---- */
+  .game-card {
+    position: relative;
+    border-radius: 22px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform .3s ease, box-shadow .3s ease;
+    background: rgba(255, 255, 255, .08);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 2px solid rgba(255, 255, 255, .12);
+    text-decoration: none;
+    display: block;
+  }
+
+  .game-card:hover {
+    transform: translateY(-8px) scale(1.03);
+    box-shadow: 0 16px 48px rgba(255, 110, 199, .35);
+    border-color: rgba(255, 110, 199, .4);
+  }
+
+  .game-card:active {
+    transform: translateY(-2px) scale(1.01);
+  }
+
+  .card-thumbnail {
+    width: 100%;
+    height: 200px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card-thumbnail canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .card-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: .75rem;
+    font-weight: 700;
+    color: white;
+    letter-spacing: 1px;
+  }
+
+  .badge-new {
+    background: linear-gradient(135deg, #ff6ec7, #ea80fc);
+    box-shadow: 0 2px 10px rgba(255, 110, 199, .5);
+    animation: pulseBadge 1.5s ease-in-out infinite;
+  }
+
+  .badge-coming {
+    background: rgba(255, 255, 255, .2);
+    backdrop-filter: blur(4px);
+  }
+
+  @keyframes pulseBadge {
+    0%, 100% { box-shadow: 0 2px 10px rgba(255,110,199,.5); }
+    50% { box-shadow: 0 2px 20px rgba(255,110,199,.8); }
+  }
+
+  .card-info {
+    padding: 16px 18px 20px;
+  }
+
+  .card-info h2 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 6px;
+  }
+
+  .card-info p {
+    font-size: .85rem;
+    color: rgba(255, 255, 255, .55);
+    line-height: 1.5;
+  }
+
+  .card-tags {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+
+  .tag {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: .7rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, .1);
+    color: rgba(255, 255, 255, .6);
+  }
+
+  /* ---- Coming soon card ---- */
+  .game-card.coming-soon {
+    opacity: .55;
+    cursor: default;
+  }
+
+  .game-card.coming-soon:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: rgba(255, 255, 255, .12);
+  }
+
+  .coming-soon-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, .3);
+    z-index: 3;
+  }
+
+  .coming-soon-overlay span {
+    font-size: 1.1rem;
+    color: white;
+    font-weight: 700;
+    letter-spacing: 2px;
+    padding: 8px 20px;
+    border: 2px solid rgba(255,255,255,.3);
+    border-radius: 30px;
+    backdrop-filter: blur(4px);
+  }
+
+  /* ---- Footer ---- */
+  .footer {
+    text-align: center;
+    margin-top: 50px;
+    color: rgba(255, 255, 255, .25);
+    font-size: .8rem;
+  }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 600px) {
+    .logo h1 { font-size: 1.8rem; }
+    .logo-deco { font-size: 2.4rem; }
+    .game-grid { grid-template-columns: 1fr; gap: 18px; }
+    .content { padding: 20px 14px 40px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="sky"></div>
+<div class="stars-layer" id="starsLayer"></div>
+
+<div class="content">
+  <div class="header">
+    <div class="logo">
+      <span class="logo-deco">🏰</span>
+      <h1>ミシャの<br>ゲームランド</h1>
+      <div class="subtitle">✨ あそんで まなぼう ✨</div>
+    </div>
+  </div>
+
+  <div class="game-grid" id="gameGrid">
+    <!-- Cards injected by JS -->
+  </div>
+
+  <div class="footer">
+    🌈 Misha's Game Land 🌈
+  </div>
+</div>
+
+<script>
+// ============ GAME DATA ============
+const GAMES = [
+  {
+    id: 'unicorn-puzzle',
+    title: '🦄 ユニコーンパズル',
+    desc: 'カラフルなユニコーンの 12ピースパズル！クリアすると つぎの えがらで あそべるよ',
+    url: 'unicorn_puzzle.html',
+    tags: ['パズル', '4さい〜'],
+    badge: 'NEW!',
+    badgeClass: 'badge-new',
+    thumbnail: 'unicorn',
+  },
+  {
+    id: 'coloring',
+    title: '🎨 いろぬりアドベンチャー',
+    desc: 'すきな いろで かわいい えに いろをぬろう！6つの えがら つき',
+    url: 'coloring.html',
+    tags: ['おえかき', '3さい〜'],
+    badge: 'NEW!',
+    badgeClass: 'badge-new',
+    thumbnail: 'coloring',
+  },
+  {
+    id: 'fruit-catch',
+    title: '🍓 ユニコーンフルーツキャッチ',
+    desc: 'ユニコーンを うごかして フルーツを キャッチ！コンボ＆フィーバーで ハイスコアを めざそう',
+    url: 'fruit_catch.html',
+    tags: ['アクション', '4さい〜'],
+    badge: 'NEW!',
+    badgeClass: 'badge-new',
+    thumbnail: 'fruitcatch',
+  },
+  {
+    id: 'coming-2',
+    title: '🎵 おとあてクイズ',
+    desc: 'どうぶつの なきごえや がっきの おとを あてよう！',
+    url: null,
+    tags: ['クイズ', '3さい〜'],
+    badge: 'COMING SOON',
+    badgeClass: 'badge-coming',
+    thumbnail: 'sound',
+    comingSoon: true,
+  },
+  {
+    id: 'coming-3',
+    title: '🧮 かずの せかい',
+    desc: 'かわいい どうぶつと いっしょに かずを かぞえよう！',
+    url: null,
+    tags: ['すうじ', '4さい〜'],
+    badge: 'COMING SOON',
+    badgeClass: 'badge-coming',
+    thumbnail: 'numbers',
+    comingSoon: true,
+  },
+];
+
+// ============ THUMBNAIL DRAWING ============
+
+function drawUnicornThumb(ctx, w, h) {
+  // Gradient bg
+  const bg = ctx.createLinearGradient(0, 0, w, h);
+  bg.addColorStop(0, '#fce4ec');
+  bg.addColorStop(.5, '#f3e5f5');
+  bg.addColorStop(1, '#e8eaf6');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+
+  // Rainbow
+  const rc = ['#ef5350','#ff9800','#ffee58','#66bb6a','#42a5f5','#5c6bc0','#ab47bc'];
+  for (let i = 0; i < 7; i++) {
+    ctx.strokeStyle = rc[i];
+    ctx.lineWidth = w * .03;
+    ctx.beginPath();
+    ctx.arc(w * .5, h * 1.1, w * .55 - i * w * .03, Math.PI, 0);
+    ctx.stroke();
+  }
+
+  // Ground
+  ctx.fillStyle = '#c8e6c9';
+  ctx.beginPath();
+  ctx.ellipse(w / 2, h, w * .6, h * .15, 0, Math.PI, 0);
+  ctx.fill();
+
+  // Flowers
+  const fcolors = ['#e91e63', '#ab47bc', '#42a5f5', '#ff9800'];
+  for (let i = 0; i < 5; i++) {
+    const fx = w * (.1 + i * .2), fy = h * .82;
+    ctx.fillStyle = fcolors[i % fcolors.length];
+    for (let j = 0; j < 5; j++) {
+      const a = (j * 72) * Math.PI / 180;
+      ctx.beginPath();
+      ctx.arc(fx + 5 * Math.cos(a), fy + 5 * Math.sin(a), 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#fff9c4';
+    ctx.beginPath();
+    ctx.arc(fx, fy, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Unicorn body
+  const cx = w * .45, cy = h * .52, s = w / 340;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(s, s);
+
+  // Body
+  ctx.fillStyle = '#f8bbd0';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 65, 45, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Legs
+  [[-30,30],[-12,33],[12,33],[30,30]].forEach(([lx,ly]) => {
+    ctx.fillStyle = '#f8bbd0';
+    ctx.beginPath();
+    ctx.roundRect(lx-7, ly, 14, 35, 4);
+    ctx.fill();
+    ctx.fillStyle = '#f48fb1';
+    ctx.beginPath();
+    ctx.roundRect(lx-8, ly+28, 16, 8, [0,0,4,4]);
+    ctx.fill();
+  });
+
+  // Neck + head
+  ctx.fillStyle = '#f8bbd0';
+  ctx.beginPath();
+  ctx.ellipse(55, -25, 18, 30, .3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(72, -48, 24, 19, .2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Snout
+  ctx.fillStyle = '#f48fb1';
+  ctx.beginPath();
+  ctx.ellipse(92, -42, 12, 8, .1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eye
+  ctx.fillStyle = 'white';
+  ctx.beginPath();
+  ctx.ellipse(80, -52, 7, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#880e4f';
+  ctx.beginPath();
+  ctx.ellipse(82, -51, 4, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'white';
+  ctx.beginPath();
+  ctx.arc(84, -53, 1.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Horn
+  const hg = ctx.createLinearGradient(76, -80, 84, -100);
+  hg.addColorStop(0, '#ffd54f');
+  hg.addColorStop(1, '#fff9c4');
+  ctx.fillStyle = hg;
+  ctx.beginPath();
+  ctx.moveTo(74, -65);
+  ctx.lineTo(79, -95);
+  ctx.lineTo(84, -65);
+  ctx.closePath();
+  ctx.fill();
+
+  // Ear
+  ctx.fillStyle = '#f8bbd0';
+  ctx.beginPath();
+  ctx.moveTo(64,-62); ctx.lineTo(58,-78); ctx.lineTo(72,-65);
+  ctx.closePath();
+  ctx.fill();
+
+  // Mane (rainbow)
+  const rainC = ['#ef5350','#ff9800','#ffee58','#66bb6a','#42a5f5','#ab47bc'];
+  const mPts = [];
+  for (let i = 0; i <= 15; i++) {
+    const t = i / 15;
+    mPts.push([
+      58 + t * -18 + Math.sin(t * Math.PI * 3) * 10,
+      -62 + t * 52 + Math.cos(t * Math.PI * 2) * 7
+    ]);
+  }
+  const seg = Math.floor(mPts.length / rainC.length);
+  for (let c = 0; c < rainC.length; c++) {
+    ctx.strokeStyle = rainC[c];
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    const start = c * seg;
+    const end = Math.min(start + seg + 1, mPts.length);
+    for (let i = start; i < end; i++) {
+      if (i === start) ctx.moveTo(mPts[i][0], mPts[i][1]);
+      else ctx.lineTo(mPts[i][0], mPts[i][1]);
+    }
+    ctx.stroke();
+  }
+
+  // Tail
+  const tPts = [];
+  for (let i = 0; i <= 15; i++) {
+    const t = i / 15;
+    tPts.push([
+      -60 + t * 45 * Math.cos(Math.PI * .7) + Math.sin(t * Math.PI * 2) * 12,
+      -5 + t * 45 * Math.sin(Math.PI * .7) + Math.cos(t * Math.PI * 3) * 8
+    ]);
+  }
+  const tseg = Math.floor(tPts.length / rainC.length);
+  for (let c = 0; c < rainC.length; c++) {
+    ctx.strokeStyle = rainC[c];
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    const start = c * tseg;
+    const end = Math.min(start + tseg + 1, tPts.length);
+    for (let i = start; i < end; i++) {
+      if (i === start) ctx.moveTo(tPts[i][0], tPts[i][1]);
+      else ctx.lineTo(tPts[i][0], tPts[i][1]);
+    }
+    ctx.stroke();
+  }
+
+  ctx.restore();
+
+  // Stars
+  drawStarT(ctx, w * .12, h * .15, 9, '#ffd54f');
+  drawStarT(ctx, w * .85, h * .2, 7, '#ffd54f');
+  drawStarT(ctx, w * .75, h * .1, 5, '#fff9c4');
+
+  // Hearts
+  drawHeartT(ctx, w * .15, h * .3, 8, '#f48fb1');
+  drawHeartT(ctx, w * .82, h * .35, 6, '#ce93d8');
+
+  // Puzzle piece icon overlay
+  ctx.fillStyle = 'rgba(255,255,255,.15)';
+  ctx.font = `bold ${w * .12}px sans-serif`;
+  ctx.fillText('🧩', w * .76, h * .92);
+}
+
+function drawColoringThumb(ctx, w, h) {
+  const bg = ctx.createLinearGradient(0, 0, w, h);
+  bg.addColorStop(0, '#fff3e0');
+  bg.addColorStop(1, '#fce4ec');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+
+  // Palette
+  const colors = ['#ef5350','#ff9800','#ffee58','#66bb6a','#42a5f5','#ab47bc','#f48fb1'];
+  colors.forEach((c, i) => {
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(w * (.12 + i * .115), h * .78, w * .045, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Paintbrush
+  ctx.save();
+  ctx.translate(w * .7, h * .35);
+  ctx.rotate(-.4);
+  ctx.fillStyle = '#8d6e63';
+  ctx.fillRect(-4, -50, 8, 60);
+  ctx.fillStyle = '#ffb74d';
+  ctx.beginPath();
+  ctx.roundRect(-8, 6, 16, 25, [0,0,6,6]);
+  ctx.fill();
+  ctx.fillStyle = '#f48fb1';
+  ctx.beginPath();
+  ctx.roundRect(-6, 26, 12, 14, [0,0,8,8]);
+  ctx.fill();
+  ctx.restore();
+
+  // Star outline
+  ctx.strokeStyle = '#bdbdbd';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 3]);
+  drawStarOutlineT(ctx, w * .35, h * .4, 45);
+  ctx.setLineDash([]);
+
+  // Partially colored
+  ctx.fillStyle = '#ffee58';
+  ctx.globalAlpha = .5;
+  drawStarFillT(ctx, w * .35, h * .4, 44);
+  ctx.globalAlpha = 1;
+
+  ctx.font = `bold ${w * .11}px sans-serif`;
+  ctx.fillStyle = 'rgba(0,0,0,.08)';
+  ctx.fillText('🎨', w * .04, h * .2);
+}
+
+function drawSoundThumb(ctx, w, h) {
+  const bg = ctx.createLinearGradient(0, 0, w, h);
+  bg.addColorStop(0, '#e8eaf6');
+  bg.addColorStop(1, '#e0f7fa');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+
+  // Musical notes
+  const notes = [
+    { x: .15, y: .3, s: 1, c: '#ec407a' },
+    { x: .5, y: .2, s: 1.3, c: '#ab47bc' },
+    { x: .8, y: .35, s: .9, c: '#42a5f5' },
+    { x: .3, y: .65, s: 1.1, c: '#66bb6a' },
+    { x: .7, y: .6, s: 1, c: '#ff9800' },
+  ];
+  notes.forEach(n => {
+    ctx.fillStyle = n.c;
+    ctx.font = `${28 * n.s}px sans-serif`;
+    ctx.fillText('♪', w * n.x, h * n.y);
+  });
+
+  // Speaker icon
+  ctx.fillStyle = '#7e57c2';
+  ctx.beginPath();
+  ctx.roundRect(w * .35, h * .38, w * .1, h * .22, 4);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(w * .45, h * .38);
+  ctx.lineTo(w * .56, h * .28);
+  ctx.lineTo(w * .56, h * .7);
+  ctx.lineTo(w * .45, h * .6);
+  ctx.closePath();
+  ctx.fill();
+
+  // Sound waves
+  ctx.strokeStyle = '#b39ddb';
+  ctx.lineWidth = 2.5;
+  for (let i = 1; i <= 3; i++) {
+    ctx.beginPath();
+    ctx.arc(w * .56, h * .49, i * 14, -.6, .6);
+    ctx.stroke();
+  }
+
+  // Animals
+  ctx.font = `${w * .1}px sans-serif`;
+  ctx.fillText('🐱', w * .05, h * .88);
+  ctx.fillText('🐶', w * .75, h * .88);
+  ctx.fillText('🐦', w * .4, h * .88);
+}
+
+function drawNumbersThumb(ctx, w, h) {
+  const bg = ctx.createLinearGradient(0, 0, w, h);
+  bg.addColorStop(0, '#e8f5e9');
+  bg.addColorStop(1, '#fff9c4');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+
+  // Numbers in circles
+  const numColors = ['#ef5350','#ff9800','#66bb6a','#42a5f5','#ab47bc'];
+  for (let i = 0; i < 5; i++) {
+    const nx = w * (.12 + i * .19), ny = h * .35;
+    ctx.fillStyle = numColors[i];
+    ctx.beginPath();
+    ctx.arc(nx, ny, w * .07, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'white';
+    ctx.font = `bold ${w * .08}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(i + 1), nx, ny + 1);
+  }
+  ctx.textAlign = 'start';
+  ctx.textBaseline = 'alphabetic';
+
+  // Cute animals counting
+  ctx.font = `${w * .09}px sans-serif`;
+  ctx.fillText('🐰', w * .1, h * .7);
+  ctx.fillText('🐰', w * .25, h * .72);
+  ctx.fillText('🐰', w * .4, h * .68);
+  ctx.fillText('🐻', w * .58, h * .72);
+  ctx.fillText('🐻', w * .73, h * .7);
+
+  // Stars
+  drawStarT(ctx, w * .08, h * .12, 7, '#ffd54f');
+  drawStarT(ctx, w * .9, h * .15, 6, '#ffd54f');
+}
+
+// ---- Helpers ----
+function drawStarT(ctx, cx, cy, r, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a = (i * 72 - 90) * Math.PI / 180;
+    const a2 = ((i * 72) + 36 - 90) * Math.PI / 180;
+    ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
+    ctx.lineTo(cx + r * .4 * Math.cos(a2), cy + r * .4 * Math.sin(a2));
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawHeartT(ctx, x, y, size, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x, y + size * .3);
+  ctx.bezierCurveTo(x, y, x - size, y, x - size, y + size * .3);
+  ctx.bezierCurveTo(x - size, y + size * .7, x, y + size, x, y + size * 1.1);
+  ctx.bezierCurveTo(x, y + size, x + size, y + size * .7, x + size, y + size * .3);
+  ctx.bezierCurveTo(x + size, y, x, y, x, y + size * .3);
+  ctx.fill();
+}
+
+function drawStarOutlineT(ctx, cx, cy, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a = (i * 72 - 90) * Math.PI / 180;
+    const a2 = ((i * 72) + 36 - 90) * Math.PI / 180;
+    ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
+    ctx.lineTo(cx + r * .38 * Math.cos(a2), cy + r * .38 * Math.sin(a2));
+  }
+  ctx.closePath();
+  ctx.stroke();
+}
+
+function drawStarFillT(ctx, cx, cy, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a = (i * 72 - 90) * Math.PI / 180;
+    const a2 = ((i * 72) + 36 - 90) * Math.PI / 180;
+    ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
+    ctx.lineTo(cx + r * .38 * Math.cos(a2), cy + r * .38 * Math.sin(a2));
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ============ BUILD UI ============
+
+const gameGrid = document.getElementById('gameGrid');
+
+function drawFruitCatchThumb(ctx, w, h) {
+  // Night sky gradient
+  const bg = ctx.createLinearGradient(0, 0, 0, h);
+  bg.addColorStop(0, '#1a237e');
+  bg.addColorStop(.6, '#4a148c');
+  bg.addColorStop(1, '#880e4f');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+
+  // Stars
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < 20; i++) {
+    ctx.globalAlpha = .3 + Math.random() * .5;
+    ctx.beginPath();
+    ctx.arc(Math.random() * w, Math.random() * h * .6, 1.5 + Math.random() * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Ground
+  ctx.fillStyle = '#1b5e20';
+  ctx.fillRect(0, h * .85, w, h * .15);
+  ctx.fillStyle = '#2e7d32';
+  for (let i = 0; i < w; i += 16) {
+    ctx.beginPath();
+    ctx.moveTo(i, h * .85); ctx.lineTo(i + 8, h * .85 - 10); ctx.lineTo(i + 16, h * .85);
+    ctx.fill();
+  }
+
+  // Falling fruits
+  const fruitEmojis = ['🍎','🍊','🍋','🍇','🍓','🍑','🍌','🍒','🫐','🥝'];
+  ctx.font = `${w * .08}px sans-serif`;
+  ctx.textAlign = 'center';
+  const positions = [[.15,.18],[.45,.1],[.75,.22],[.3,.38],[.6,.32],[.85,.42],[.12,.5],[.52,.48],[.9,.15],[.4,.58]];
+  positions.forEach((p, i) => {
+    ctx.globalAlpha = .7 + Math.random() * .3;
+    ctx.fillText(fruitEmojis[i], w * p[0], h * p[1]);
+  });
+  ctx.globalAlpha = 1;
+
+  // Unicorn at bottom center
+  const ux = w * .45, uy = h * .72;
+  const s = w / 500;
+  ctx.save();
+  ctx.translate(ux, uy);
+  ctx.scale(s, s);
+
+  // Body
+  ctx.fillStyle = '#f8bbd0';
+  ctx.beginPath(); ctx.ellipse(0, 10, 50, 36, 0, 0, Math.PI * 2); ctx.fill();
+  // Head
+  ctx.beginPath(); ctx.ellipse(40, -20, 30, 22, .15, 0, Math.PI * 2); ctx.fill();
+  // Snout
+  ctx.fillStyle = '#f48fb1';
+  ctx.beginPath(); ctx.ellipse(65, -15, 12, 8, 0, 0, Math.PI * 2); ctx.fill();
+  // Eye
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.ellipse(50, -26, 7, 8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#880e4f';
+  ctx.beginPath(); ctx.ellipse(52, -25, 4, 5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(54, -27, 2, 0, Math.PI * 2); ctx.fill();
+  // Horn
+  const hg = ctx.createLinearGradient(38, -40, 44, -65);
+  hg.addColorStop(0, '#ffd54f'); hg.addColorStop(1, '#fff9c4');
+  ctx.fillStyle = hg;
+  ctx.beginPath(); ctx.moveTo(36, -38); ctx.lineTo(42, -68); ctx.lineTo(48, -38); ctx.closePath(); ctx.fill();
+  // Ear
+  ctx.fillStyle = '#f8bbd0';
+  ctx.beginPath(); ctx.moveTo(32,-36); ctx.lineTo(28,-52); ctx.lineTo(40,-38); ctx.closePath(); ctx.fill();
+  // Mouth open (catching!)
+  ctx.fillStyle = '#c62828';
+  ctx.beginPath(); ctx.ellipse(62, -10, 7, 6, 0, 0, Math.PI * 2); ctx.fill();
+  // Legs
+  ctx.fillStyle = '#f8bbd0';
+  [[-25,35],[-8,38],[10,38],[25,35]].forEach(([lx,ly]) => {
+    ctx.beginPath(); ctx.roundRect(lx-6, ly, 12, 30, 4); ctx.fill();
+  });
+  // Mane rainbow
+  const rc = ['#ef5350','#ff9800','#ffee58','#66bb6a','#42a5f5','#ab47bc'];
+  for (let m = 0; m < 3; m++) {
+    ctx.strokeStyle = rc[m * 2];
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(28 - m * 4, -36 + m * 3);
+    ctx.bezierCurveTo(15 - m * 5, -30 + m * 4, 5 - m * 5, -10, -5 - m * 3, 5 + m * 5);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Score text
+  ctx.fillStyle = '#ffd54f';
+  ctx.strokeStyle = 'rgba(0,0,0,.3)';
+  ctx.lineWidth = 3;
+  ctx.font = `bold ${w * .065}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.strokeText('⭐ SCORE: 1250', w * .5, h * .92);
+  ctx.fillText('⭐ SCORE: 1250', w * .5, h * .92);
+
+  // Combo badge
+  ctx.fillStyle = '#ff6e40';
+  ctx.font = `bold ${w * .055}px sans-serif`;
+  ctx.strokeText('🔥 8 コンボ！', w * .5, h * .98);
+  ctx.fillText('🔥 8 コンボ！', w * .5, h * .98);
+
+  // Sparkle effects
+  drawStarT(ctx, w * .08, h * .08, 10, '#ffd54f');
+  drawStarT(ctx, w * .92, h * .12, 8, '#fff9c4');
+}
+
+const thumbDrawers = {
+  unicorn: drawUnicornThumb,
+  coloring: drawColoringThumb,
+  sound: drawSoundThumb,
+  numbers: drawNumbersThumb,
+  fruitcatch: drawFruitCatchThumb,
+};
+
+GAMES.forEach(game => {
+  const card = document.createElement(game.url ? 'a' : 'div');
+  if (game.url) card.href = game.url;
+  card.className = 'game-card' + (game.comingSoon ? ' coming-soon' : '');
+
+  const thumbDiv = document.createElement('div');
+  thumbDiv.className = 'card-thumbnail';
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 500;
+  canvas.height = 400;
+  const tctx = canvas.getContext('2d');
+  if (thumbDrawers[game.thumbnail]) {
+    thumbDrawers[game.thumbnail](tctx, 500, 400);
+  }
+  thumbDiv.appendChild(canvas);
+
+  // Badge
+  const badge = document.createElement('div');
+  badge.className = 'card-badge ' + game.badgeClass;
+  badge.textContent = game.badge;
+  thumbDiv.appendChild(badge);
+
+  card.appendChild(thumbDiv);
+
+  // Coming soon overlay
+  if (game.comingSoon) {
+    const overlay = document.createElement('div');
+    overlay.className = 'coming-soon-overlay';
+    overlay.innerHTML = '<span>もうすぐ あそべるよ!</span>';
+    thumbDiv.appendChild(overlay);
+  }
+
+  // Info
+  const info = document.createElement('div');
+  info.className = 'card-info';
+  info.innerHTML = `
+    <h2>${game.title}</h2>
+    <p>${game.desc}</p>
+    <div class="card-tags">
+      ${game.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+    </div>
+  `;
+  card.appendChild(info);
+
+  gameGrid.appendChild(card);
+});
+
+// ============ STARS ============
+
+const starsLayer = document.getElementById('starsLayer');
+for (let i = 0; i < 60; i++) {
+  const s = document.createElement('div');
+  s.className = 'twinkle';
+  const size = 1.5 + Math.random() * 2.5;
+  s.style.width = size + 'px';
+  s.style.height = size + 'px';
+  s.style.left = Math.random() * 100 + 'vw';
+  s.style.top = Math.random() * 60 + 'vh';
+  s.style.animationDelay = (Math.random() * 3) + 's';
+  s.style.animationDuration = (1.5 + Math.random() * 2) + 's';
+  starsLayer.appendChild(s);
+}
+
+// Floating emojis
+const floaterEmojis = ['🦄','⭐','💖','🌸','🌈','✨','🎀','🦋','🌙','🍭'];
+for (let i = 0; i < 8; i++) {
+  const el = document.createElement('div');
+  el.className = 'floater';
+  el.textContent = floaterEmojis[i % floaterEmojis.length];
+  el.style.left = (5 + Math.random() * 85) + 'vw';
+  el.style.top = (10 + Math.random() * 70) + 'vh';
+  el.style.animationDelay = (Math.random() * 5) + 's';
+  el.style.animationDuration = (10 + Math.random() * 10) + 's';
+  el.style.fontSize = (1.2 + Math.random() * 1.2) + 'rem';
+  document.body.appendChild(el);
+}
+
+// roundRect polyfill
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+    if (typeof r === 'number') r = [r,r,r,r];
+    if (!Array.isArray(r)) r = [5,5,5,5];
+    const [tl,tr,br,bl] = r;
+    this.moveTo(x+tl, y);
+    this.lineTo(x+w-tr, y);
+    this.quadraticCurveTo(x+w, y, x+w, y+tr);
+    this.lineTo(x+w, y+h-br);
+    this.quadraticCurveTo(x+w, y+h, x+w-br, y+h);
+    this.lineTo(x+bl, y+h);
+    this.quadraticCurveTo(x, y+h, x, y+h-bl);
+    this.lineTo(x, y+tl);
+    this.quadraticCurveTo(x, y, x+tl, y);
+    this.closePath();
+  };
+}
+</script>
+</body>
+</html>
