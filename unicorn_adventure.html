@@ -1,0 +1,2308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🦄 ユニコーンアドベンチャー 🌈</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #wrapper {
+    position: relative;
+    width: 800px;
+    height: 500px;
+    max-width: 100vw;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  .home-btn {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 50;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 13px;
+    font-size: .82rem;
+    font-weight: 700;
+    color: #7b1fa2;
+    background: rgba(255,255,255,.85);
+    backdrop-filter: blur(6px);
+    border: 2px solid #ce93d8;
+    border-radius: 24px;
+    cursor: pointer;
+    text-decoration: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    transition: transform .15s;
+  }
+  .home-btn:hover { transform: scale(1.06); }
+
+  /* Touch controls */
+  #touch-controls {
+    position: absolute;
+    bottom: 10px;
+    left: 0;
+    right: 0;
+    display: none;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 0 10px;
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  .touch-lr {
+    display: flex;
+    gap: 8px;
+    pointer-events: all;
+  }
+
+  .touch-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.3);
+    border: 3px solid rgba(255,255,255,.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: white;
+    text-shadow: 0 1px 3px rgba(0,0,0,.4);
+    cursor: pointer;
+    pointer-events: all;
+    -webkit-tap-highlight-color: transparent;
+    backdrop-filter: blur(4px);
+    transition: background .1s;
+    box-shadow: 0 2px 10px rgba(0,0,0,.3);
+  }
+
+  .touch-btn:active, .touch-btn.pressed {
+    background: rgba(255,255,255,.55);
+  }
+
+  @media (max-width: 820px) {
+    #wrapper {
+      width: 100vw;
+      height: calc(100vw * 500 / 800);
+      max-height: 100vh;
+    }
+    #touch-controls { display: flex; }
+  }
+
+  @media (max-height: 520px) {
+    #wrapper {
+      height: 100vh;
+      width: calc(100vh * 800 / 500);
+      max-width: 100vw;
+    }
+    #touch-controls { display: flex; }
+  }
+</style>
+</head>
+<body>
+
+<div id="wrapper">
+  <a href="index.html" class="home-btn">🏰 もどる</a>
+  <canvas id="game" width="800" height="500"></canvas>
+
+  <div id="touch-controls">
+    <div class="touch-lr">
+      <div class="touch-btn" id="btn-left">◀</div>
+      <div class="touch-btn" id="btn-right">▶</div>
+    </div>
+    <div class="touch-btn" id="btn-jump" style="width:70px;height:70px;font-size:1.8rem;">↑</div>
+  </div>
+</div>
+
+<script>
+// =====================================================
+// UNICORN ADVENTURE — complete self-contained game
+// =====================================================
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = 800, H = 500;
+
+// ---- roundRect polyfill ----
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r){
+    if(typeof r==='number')r=[r,r,r,r];
+    if(!Array.isArray(r))r=[5,5,5,5];
+    const[tl,tr,br,bl]=r;
+    this.moveTo(x+tl,y);this.lineTo(x+w-tr,y);this.quadraticCurveTo(x+w,y,x+w,y+tr);
+    this.lineTo(x+w,y+h-br);this.quadraticCurveTo(x+w,y+h,x+w-br,y+h);
+    this.lineTo(x+bl,y+h);this.quadraticCurveTo(x,y+h,x,y+h-bl);
+    this.lineTo(x,y+tl);this.quadraticCurveTo(x,y,x+tl,y);this.closePath();
+  };
+}
+
+// =====================================================
+// AUDIO
+// =====================================================
+let audioCtx = null;
+function getAudio() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){}
+  }
+  return audioCtx;
+}
+
+function playTone(freq, dur, type='sine', vol=0.18, delay=0) {
+  const ac = getAudio(); if (!ac) return;
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  osc.connect(gain); gain.connect(ac.destination);
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, ac.currentTime + delay);
+  gain.gain.setValueAtTime(vol, ac.currentTime + delay);
+  gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + delay + dur);
+  osc.start(ac.currentTime + delay);
+  osc.stop(ac.currentTime + delay + dur + 0.05);
+}
+
+function sfxJump() {
+  playTone(300, 0.06, 'sine', 0.12);
+  playTone(500, 0.10, 'sine', 0.10, 0.06);
+}
+
+function sfxCollect() {
+  [523,659,784,1047].forEach((f,i) => playTone(f, 0.12, 'sine', 0.14, i*0.07));
+}
+
+function sfxPortal() {
+  [330,440,550,660,880].forEach((f,i) => playTone(f, 0.15, 'triangle', 0.12, i*0.06));
+}
+
+function sfxSparkle() {
+  playTone(1200 + Math.random()*400, 0.08, 'sine', 0.06);
+}
+
+function sfxCelebration() {
+  const melody = [523,659,784,659,784,1047,784,1047,1319];
+  melody.forEach((f,i) => playTone(f, 0.18, 'triangle', 0.15, i*0.13));
+}
+
+// =====================================================
+// INPUT
+// =====================================================
+const keys = { left: false, right: false, up: false };
+
+document.addEventListener('keydown', e => {
+  if (e.code==='ArrowLeft')  { keys.left=true;  e.preventDefault(); }
+  if (e.code==='ArrowRight') { keys.right=true; e.preventDefault(); }
+  if (e.code==='ArrowUp' || e.code==='Space') { keys.up=true; e.preventDefault(); }
+});
+document.addEventListener('keyup', e => {
+  if (e.code==='ArrowLeft')  keys.left=false;
+  if (e.code==='ArrowRight') keys.right=false;
+  if (e.code==='ArrowUp' || e.code==='Space') keys.up=false;
+});
+
+// Touch buttons
+function bindTouch(id, key) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('touchstart', e => { e.preventDefault(); keys[key]=true; el.classList.add('pressed'); getAudio(); }, {passive:false});
+  el.addEventListener('touchend',   e => { e.preventDefault(); keys[key]=false; el.classList.remove('pressed'); }, {passive:false});
+  el.addEventListener('touchcancel',e => { keys[key]=false; el.classList.remove('pressed'); });
+  el.addEventListener('mousedown', e => { keys[key]=true; el.classList.add('pressed'); getAudio(); });
+  el.addEventListener('mouseup',   e => { keys[key]=false; el.classList.remove('pressed'); });
+}
+bindTouch('btn-left',  'left');
+bindTouch('btn-right', 'right');
+bindTouch('btn-jump',  'up');
+
+// =====================================================
+// PARTICLE SYSTEM
+// =====================================================
+const particles = [];
+
+function spawnParticles(x, y, count, colors, opts={}) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = (opts.speed || 2) + Math.random() * (opts.speedVar || 3);
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - (opts.upBias || 1),
+      life: 1,
+      decay: (opts.decay || 0.02) + Math.random() * 0.02,
+      size: (opts.size || 4) + Math.random() * (opts.sizeVar || 4),
+      color: colors[Math.floor(Math.random()*colors.length)],
+      type: opts.type || 'circle',
+      gravity: opts.gravity !== undefined ? opts.gravity : 0.1,
+      spin: (Math.random()-0.5)*0.3,
+      angle: Math.random()*Math.PI*2,
+    });
+  }
+}
+
+const RAINBOW = ['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#c77dff','#ff9ff3','#48cae4'];
+const GOLD    = ['#ffd700','#ffec47','#ffe082','#fff9c4'];
+const CONFETTI= ['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#c77dff','#ff9ff3','#ff9900','#00ffcc'];
+
+function updateParticles() {
+  for (let i = particles.length-1; i >= 0; i--) {
+    const p = particles[i];
+    p.x  += p.vx;
+    p.y  += p.vy;
+    p.vy += p.gravity;
+    p.vx *= 0.98;
+    p.life -= p.decay;
+    p.angle += p.spin;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function drawParticles(camX) {
+  particles.forEach(p => {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, p.life);
+    const sx = p.x - camX;
+    const sy = p.y;
+    if (p.type === 'star') {
+      drawStar(sx, sy, p.size, p.color);
+    } else if (p.type === 'rect') {
+      ctx.fillStyle = p.color;
+      ctx.translate(sx, sy);
+      ctx.rotate(p.angle);
+      ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size * 0.6);
+    } else {
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(sx, sy, p.size/2, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  });
+}
+
+function drawStar(x, y, r, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a  = (i*72 - 90) * Math.PI/180;
+    const a2 = ((i*72)+36-90) * Math.PI/180;
+    const fn = i === 0 ? 'moveTo' : 'lineTo';
+    ctx[fn](x + r*Math.cos(a), y + r*Math.sin(a));
+    ctx.lineTo(x + r*0.4*Math.cos(a2), y + r*0.4*Math.sin(a2));
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+// =====================================================
+// RAINBOW TRAIL
+// =====================================================
+const trail = [];
+const TRAIL_MAX = 18;
+
+function addTrail(x, y) {
+  trail.push({ x, y, life: 1 });
+  if (trail.length > TRAIL_MAX) trail.shift();
+}
+
+function drawTrail(camX) {
+  trail.forEach((t, i) => {
+    const alpha = (i / TRAIL_MAX) * t.life * 0.55;
+    const r = 6 * (i / TRAIL_MAX);
+    const hue = (i / TRAIL_MAX) * 270 + 20;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = `hsl(${hue},100%,65%)`;
+    ctx.beginPath();
+    ctx.arc(t.x - camX, t.y, r, 0, Math.PI*2);
+    ctx.fill();
+  });
+  trail.forEach(t => t.life -= 0.05);
+  ctx.globalAlpha = 1;
+}
+
+// =====================================================
+// WORLD DEFINITIONS
+// =====================================================
+
+// Helper to create platform arrays
+function plat(x, y, w, h) { return {x, y, w, h}; }
+
+// Each world: name, colors, platforms, treasure, coins, portal
+const WORLDS = [
+  // World 1: Grassland 草原
+  {
+    name: '草原',
+    nameEn: 'Grassland',
+    emoji: '🌈',
+    bg: ['#87CEEB','#b0e0ff','#6ec6ea'],
+    groundColor: '#5DBB63',
+    groundTrim: '#3d9e43',
+    drawBg(cx) { drawGrasslandBg(cx); },
+    platforms: [
+      plat(0,   440, 800, 60),   // ground chunk 1
+      plat(800, 440, 800, 60),
+      plat(1600,440, 800, 60),
+      plat(2400,440, 800, 60),
+      plat(3200,440, 800, 60),
+      plat(4000,440,1100, 60),
+
+      plat(200, 360,120, 18),
+      plat(420, 300,140, 18),
+      plat(620, 360,100, 18),
+      plat(800, 280,160, 18),
+      plat(1020,330,120, 18),
+      plat(1200,260,140, 18),
+      plat(1400,340,100, 18),
+      plat(1550,200,160, 18),
+      plat(1750,310,120, 18),
+      plat(1950,250,140, 18),
+      plat(2150,320,130, 18),
+      plat(2350,200,120, 18),
+      plat(2550,300,130, 18),
+      plat(2750,230,120, 18),
+      plat(2900,150,140, 18),  // ← treasure here
+      plat(3100,280,150, 18),
+      plat(3300,360,120, 18),
+      plat(3500,280,140, 18),
+      plat(3700,200,130, 18),
+      plat(3900,320,120, 18),
+      plat(4100,240,140, 18),
+      plat(4300,160,120, 18),  // near portal
+      plat(4500,300,160, 18),
+    ],
+    coins: genCoins([
+      [220,330],[440,270],[640,330],[820,250],[1040,300],
+      [1220,230],[1420,310],[1570,170],[1770,280],[1970,220],
+      [2170,290],[2370,170],[2570,270],[2770,200],[2920,120],
+      [3120,250],[3320,330],[3520,250],[3720,170],[3920,290],
+    ]),
+    treasureX: 2930, treasureY: 110,
+    portalX: 4700, portalY: 430,
+    platColor: '#5DBB63',
+    platTrimColor: '#3d9e43',
+  },
+
+  // World 2: Sky/Clouds 空・雲
+  {
+    name: '空・雲',
+    nameEn: 'Sky',
+    emoji: '⭐',
+    bg: ['#c8f0ff','#e8f8ff','#f0faff'],
+    drawBg(cx) { drawSkyBg(cx); },
+    platforms: [
+      // cloud platforms
+      plat(0,   440,600, 22),
+      plat(600, 440,600, 22),
+      plat(1200,440,600, 22),
+      plat(1800,440,700, 22),
+      plat(2500,440,700, 22),
+      plat(3200,440,700, 22),
+      plat(3900,440,700, 22),
+      plat(4600,440,600, 22),
+
+      plat(180, 360,160, 22),
+      plat(420, 290,180, 22),
+      plat(660, 360,140, 22),
+      plat(860, 280,180, 22),
+      plat(1080,360,160, 22),
+      plat(1280,260,180, 22),
+      plat(1500,340,150, 22),
+      plat(1700,200,180, 22),
+      plat(1920,300,160, 22),
+      plat(2120,220,180, 22),
+      plat(2340,310,160, 22),
+      plat(2540,160,200, 22),
+      plat(2780,260,160, 22),
+      plat(2980,130,200, 22),  // ← treasure here
+      plat(3200,270,160, 22),
+      plat(3420,360,170, 22),
+      plat(3640,270,160, 22),
+      plat(3860,180,180, 22),
+      plat(4060,310,160, 22),
+      plat(4280,200,180, 22),  // near portal
+      plat(4500,360,200, 22),
+    ],
+    coins: genCoins([
+      [200,330],[440,260],[680,330],[880,250],[1100,330],
+      [1300,230],[1520,310],[1720,170],[1940,270],[2140,190],
+      [2360,280],[2560,130],[2800,230],[3000,100],[3220,240],
+      [3440,330],[3660,240],[3880,150],[4080,280],[4300,170],
+    ]),
+    treasureX: 3010, treasureY: 92,
+    portalX: 4680, portalY: 430,
+    platColor: '#fff',
+    platTrimColor: '#d0eeff',
+    platStyle: 'cloud',
+  },
+
+  // World 3: Underground Cave 地下洞窟
+  {
+    name: '地下洞窟',
+    nameEn: 'Cave',
+    emoji: '🔮',
+    bg: ['#1a0033','#2a004d','#150022'],
+    drawBg(cx) { drawCaveBg(cx); },
+    platforms: [
+      plat(0,   440,800, 60),
+      plat(800, 440,800, 60),
+      plat(1600,440,800, 60),
+      plat(2400,440,800, 60),
+      plat(3200,440,900, 60),
+      plat(4100,440,1000,60),
+
+      plat(200, 360,140, 20),
+      plat(400, 300,120, 20),
+      plat(600, 380,140, 20),
+      plat(800, 280,160, 20),
+      plat(1000,360,130, 20),
+      plat(1200,250,150, 20),
+      plat(1420,350,120, 20),
+      plat(1600,200,160, 20),
+      plat(1800,330,130, 20),
+      plat(2000,240,150, 20),
+      plat(2200,340,130, 20),
+      plat(2400,180,160, 20),
+      plat(2600,290,140, 20),
+      plat(2800,150,160, 20),  // ← treasure here
+      plat(3020,280,140, 20),
+      plat(3220,360,150, 20),
+      plat(3440,260,140, 20),
+      plat(3660,180,160, 20),
+      plat(3880,310,140, 20),
+      plat(4100,220,160, 20),
+      plat(4320,140,160, 20),
+      plat(4540,300,180, 20),
+    ],
+    coins: genCoins([
+      [220,330],[420,270],[620,350],[820,250],[1020,330],
+      [1220,220],[1440,320],[1620,170],[1820,300],[2020,210],
+      [2220,310],[2420,150],[2620,260],[2820,120],[3040,250],
+      [3240,330],[3460,230],[3680,150],[3900,280],[4120,190],
+    ]),
+    treasureX: 2820, treasureY: 108,
+    portalX: 4720, portalY: 430,
+    platColor: '#4a0080',
+    platTrimColor: '#00ffcc',
+    platStyle: 'crystal',
+  },
+
+  // World 4: Night Sky 夜空
+  {
+    name: '夜空',
+    nameEn: 'Night Sky',
+    emoji: '🌙',
+    bg: ['#00001a','#000033','#00004d'],
+    drawBg(cx) { drawNightBg(cx); },
+    platforms: [
+      plat(0,   440,700, 25),
+      plat(700, 440,700, 25),
+      plat(1400,440,700, 25),
+      plat(2100,440,700, 25),
+      plat(2800,440,700, 25),
+      plat(3500,440,700, 25),
+      plat(4200,440,900, 25),
+
+      plat(200, 360,140, 25),
+      plat(420, 280,160, 25),
+      plat(640, 360,140, 25),
+      plat(840, 260,160, 25),
+      plat(1060,360,140, 25),
+      plat(1260,240,160, 25),
+      plat(1480,340,140, 25),
+      plat(1680,190,180, 25),
+      plat(1900,310,150, 25),
+      plat(2110,220,160, 25),
+      plat(2320,330,150, 25),
+      plat(2530,170,180, 25),
+      plat(2760,280,150, 25),
+      plat(2960,130,180, 25),  // ← treasure here
+      plat(3180,270,150, 25),
+      plat(3400,360,150, 25),
+      plat(3620,260,150, 25),
+      plat(3840,170,170, 25),
+      plat(4060,300,150, 25),
+      plat(4280,190,170, 25),
+      plat(4500,360,200, 25),
+    ],
+    coins: genCoins([
+      [220,330],[440,250],[660,330],[860,230],[1080,330],
+      [1280,210],[1500,310],[1700,160],[1920,280],[2130,190],
+      [2340,300],[2550,140],[2780,250],[2980,100],[3200,240],
+      [3420,330],[3640,230],[3860,140],[4080,270],[4300,160],
+    ]),
+    treasureX: 2975, treasureY: 92,
+    portalX: 4680, portalY: 430,
+    platColor: '#1a1a4a',
+    platTrimColor: '#ffd700',
+    platStyle: 'star',
+  },
+
+  // World 5: Enchanted Forest 魔法の森
+  {
+    name: '魔法の森',
+    nameEn: 'Enchanted Forest',
+    emoji: '🌺',
+    bg: ['#001a00','#003300','#001400'],
+    drawBg(cx) { drawForestBg(cx); },
+    platforms: [
+      plat(0,   440,800, 60),
+      plat(800, 440,800, 60),
+      plat(1600,440,800, 60),
+      plat(2400,440,800, 60),
+      plat(3200,440,800, 60),
+      plat(4000,440,1100,60),
+
+      plat(200, 360,150, 22),
+      plat(420, 290,130, 22),
+      plat(620, 370,140, 22),
+      plat(820, 265,160, 22),
+      plat(1040,360,140, 22),
+      plat(1240,245,160, 22),
+      plat(1460,355,140, 22),
+      plat(1660,195,180, 22),
+      plat(1880,320,150, 22),
+      plat(2090,225,160, 22),
+      plat(2310,340,150, 22),
+      plat(2510,175,180, 22),
+      plat(2740,290,150, 22),
+      plat(2945,135,180, 22),  // ← treasure here
+      plat(3165,285,150, 22),
+      plat(3385,375,150, 22),
+      plat(3605,275,150, 22),
+      plat(3825,185,170, 22),
+      plat(4045,315,150, 22),
+      plat(4265,205,170, 22),
+      plat(4485,370,200, 22),
+    ],
+    coins: genCoins([
+      [225,330],[445,260],[645,340],[845,235],[1065,330],
+      [1265,215],[1485,325],[1685,165],[1905,290],[2115,195],
+      [2335,310],[2535,145],[2765,260],[2970,105],[3190,255],
+      [3410,345],[3630,245],[3850,155],[4070,285],[4290,175],
+    ]),
+    treasureX: 2960, treasureY: 97,
+    portalX: 4680, portalY: 430,
+    platColor: '#1a4d1a',
+    platTrimColor: '#ff00ff',
+    platStyle: 'mushroom',
+  },
+
+  // World 6: Underwater Cave 海底洞窟
+  {
+    name: '海底洞窟',
+    nameEn: 'Underwater Cave',
+    emoji: '💎',
+    bg: ['#001a33','#003366','#001122'],
+    drawBg(cx) { drawUnderwaterBg(cx); },
+    platforms: [
+      plat(0,   440,800, 60),
+      plat(800, 440,800, 60),
+      plat(1600,440,800, 60),
+      plat(2400,440,800, 60),
+      plat(3200,440,800, 60),
+      plat(4000,440,1100,60),
+
+      plat(200, 360,150, 22),
+      plat(415, 288,135, 22),
+      plat(620, 368,142, 22),
+      plat(822, 263,162, 22),
+      plat(1040,358,142, 22),
+      plat(1243,243,162, 22),
+      plat(1462,353,142, 22),
+      plat(1665,193,182, 22),
+      plat(1882,318,152, 22),
+      plat(2091,223,162, 22),
+      plat(2312,338,152, 22),
+      plat(2512,173,182, 22),
+      plat(2743,288,152, 22),
+      plat(2944,133,182, 22),  // ← treasure here
+      plat(3166,283,152, 22),
+      plat(3386,373,152, 22),
+      plat(3607,273,152, 22),
+      plat(3826,183,172, 22),
+      plat(4046,313,152, 22),
+      plat(4267,203,172, 22),
+      plat(4487,368,202, 22),
+    ],
+    coins: genCoins([
+      [222,330],[438,258],[642,338],[844,233],[1063,328],
+      [1266,213],[1484,323],[1687,163],[1904,288],[2114,193],
+      [2334,308],[2534,143],[2765,258],[2967,103],[3189,253],
+      [3409,343],[3630,243],[3849,153],[4069,283],[4290,173],
+    ]),
+    treasureX: 2957, treasureY: 95,
+    portalX: 4680, portalY: 430,
+    platColor: '#004466',
+    platTrimColor: '#00ffcc',
+    platStyle: 'coral',
+  },
+
+  // World 7: Sky Castle 天空のお城
+  {
+    name: '天空のお城',
+    nameEn: 'Sky Castle',
+    emoji: '👑',
+    bg: ['#fff9e6','#fffbf0','#fff3cc'],
+    drawBg(cx) { drawCastleBg(cx); },
+    platforms: [
+      plat(0,   440,800, 60),
+      plat(800, 440,800, 60),
+      plat(1600,440,800, 60),
+      plat(2400,440,800, 60),
+      plat(3200,440,800, 60),
+      plat(4000,440,1100,60),
+
+      plat(200, 360,150, 24),
+      plat(420, 288,140, 24),
+      plat(625, 368,145, 24),
+      plat(828, 263,165, 24),
+      plat(1042,358,145, 24),
+      plat(1248,243,165, 24),
+      plat(1463,353,145, 24),
+      plat(1668,193,185, 24),
+      plat(1884,318,155, 24),
+      plat(2092,223,165, 24),
+      plat(2314,338,155, 24),
+      plat(2514,173,185, 24),
+      plat(2745,288,155, 24),
+      plat(2945,133,185, 24),  // ← treasure (crown) here
+      plat(3168,283,155, 24),
+      plat(3388,373,155, 24),
+      plat(3609,273,155, 24),
+      plat(3828,183,175, 24),
+      plat(4048,313,155, 24),
+      plat(4268,203,175, 24),
+      plat(4488,368,205, 24),
+    ],
+    coins: genCoins([
+      [222,330],[442,258],[647,338],[850,233],[1065,328],
+      [1270,213],[1485,323],[1690,163],[1906,288],[2115,193],
+      [2336,308],[2536,143],[2767,258],[2967,103],[3190,253],
+      [3410,343],[3631,243],[3850,153],[4070,283],[4290,173],
+    ]),
+    treasureX: 2960, treasureY: 92,
+    portalX: 4680, portalY: 430,
+    platColor: '#b8860b',
+    platTrimColor: '#ffd700',
+    platStyle: 'gold',
+  },
+];
+
+function genCoins(positions) {
+  return positions.map(([x,y]) => ({x, y, collected: false}));
+}
+
+// =====================================================
+// TREASURE DEFINITIONS
+// =====================================================
+const TREASURES = [
+  { emoji:'🌈', name:'虹の宝石',          color:'#ff9ff3' },
+  { emoji:'⭐', name:'星のかけら',         color:'#ffd700' },
+  { emoji:'🔮', name:'まほうのクリスタル', color:'#c77dff' },
+  { emoji:'🌙', name:'月のしずく',         color:'#a8d8f0' },
+  { emoji:'🌺', name:'ふしぎなはな',       color:'#ff6bff' },
+  { emoji:'💎', name:'海のひすい',         color:'#48cae4' },
+  { emoji:'👑', name:'おうさまのかんむり', color:'#ffd700' },
+];
+
+// =====================================================
+// PLAYER
+// =====================================================
+const GRAVITY = 0.55;
+const JUMP_FORCE = -13.5;
+const MOVE_SPEED = 3.8;
+const FRICTION = 0.82;
+const ACC = 0.7;
+
+const player = {
+  x: 80, y: 360,
+  vx: 0, vy: 0,
+  w: 44, h: 42,
+  onGround: false,
+  facingRight: true,
+  walkFrame: 0,
+  walkTimer: 0,
+  jumpCooldown: 0,
+  bounceAnim: 0,
+};
+
+// =====================================================
+// GAME STATE
+// =====================================================
+let currentWorld = 0;
+let treasures = new Array(7).fill(false);
+let camera = 0;
+let gameState = 'title'; // 'title' | 'playing' | 'ending'
+let endTimer = 0;
+let collectAnim = null; // {emoji, x, y, timer}
+let worldCoins = [];
+let levelTimer = 0;
+
+// Fireworks for ending
+const fireworks = [];
+
+function resetWorld(wIndex) {
+  currentWorld = wIndex;
+  player.x = 80;
+  player.y = 360;
+  player.vx = 0;
+  player.vy = 0;
+  camera = 0;
+  trail.length = 0;
+  particles.length = 0;
+  levelTimer = 0;
+  // Deep clone coins for this world
+  const w = WORLDS[wIndex];
+  worldCoins = w.coins.map(c => ({...c, collected: false}));
+}
+
+// =====================================================
+// COLLISION
+// =====================================================
+function rectOverlap(ax,ay,aw,ah, bx,by,bw,bh) {
+  return ax < bx+bw && ax+aw > bx && ay < by+bh && ay+ah > by;
+}
+
+function resolvePlatformCollision(player, plats) {
+  const pw = player.w, ph = player.h;
+  player.onGround = false;
+
+  for (const p of plats) {
+    if (!rectOverlap(player.x, player.y, pw, ph, p.x, p.y, p.w, p.h)) continue;
+
+    const overlapLeft  = (player.x + pw) - p.x;
+    const overlapRight = (p.x + p.w) - player.x;
+    const overlapTop   = (player.y + ph) - p.y;
+    const overlapBot   = (p.y + p.h) - player.y;
+
+    const minH = Math.min(overlapLeft, overlapRight);
+    const minV = Math.min(overlapTop,  overlapBot);
+
+    if (minV < minH) {
+      if (overlapTop < overlapBot) {
+        // landing on top
+        player.y = p.y - ph;
+        if (player.vy > 0) { player.vy = 0; player.onGround = true; }
+      } else {
+        // hitting from below
+        player.y = p.y + p.h;
+        if (player.vy < 0) player.vy = 0;
+      }
+    } else {
+      if (overlapLeft < overlapRight) {
+        player.x = p.x - pw;
+        player.vx = 0;
+      } else {
+        player.x = p.x + p.w;
+        player.vx = 0;
+      }
+    }
+  }
+}
+
+// =====================================================
+// UPDATE
+// =====================================================
+function update() {
+  if (gameState === 'title' || gameState === 'ending') {
+    updateParticles();
+    if (gameState === 'ending') updateFireworks();
+    return;
+  }
+
+  levelTimer++;
+  const world = WORLDS[currentWorld];
+
+  // Movement
+  if (keys.left)  { player.vx -= ACC; player.facingRight = false; }
+  if (keys.right) { player.vx += ACC; player.facingRight = true; }
+  if (!keys.left && !keys.right) player.vx *= FRICTION;
+  player.vx = Math.max(-MOVE_SPEED, Math.min(MOVE_SPEED, player.vx));
+
+  if (player.jumpCooldown > 0) player.jumpCooldown--;
+  if ((keys.up) && player.onGround && player.jumpCooldown === 0) {
+    player.vy = JUMP_FORCE;
+    player.onGround = false;
+    player.jumpCooldown = 12;
+    sfxJump();
+    spawnParticles(player.x + player.w/2, player.y + player.h,
+      6, RAINBOW, {speed:2, speedVar:2, decay:0.04, size:4, sizeVar:3, gravity:0.08, upBias:0, type:'circle'});
+  }
+
+  player.vy += GRAVITY;
+  if (player.vy > 18) player.vy = 18;
+  player.x += player.vx;
+  player.y += player.vy;
+
+  // Keep in bounds (left)
+  if (player.x < 0) { player.x = 0; player.vx = 0; }
+
+  // Resolve collisions
+  resolvePlatformCollision(player, world.platforms);
+
+  // Fall into void — respawn
+  if (player.y > H + 50) {
+    player.x = 80; player.y = 360;
+    player.vx = 0; player.vy = 0;
+    camera = 0;
+  }
+
+  // Walk animation
+  if (Math.abs(player.vx) > 0.3 && player.onGround) {
+    player.walkTimer++;
+    if (player.walkTimer > 8) { player.walkTimer = 0; player.walkFrame = (player.walkFrame+1)%4; }
+  } else if (player.onGround) {
+    player.walkFrame = 0;
+  }
+  player.bounceAnim += 0.15;
+
+  // Camera
+  const targetCam = player.x - W/3;
+  camera += (targetCam - camera) * 0.12;
+  if (camera < 0) camera = 0;
+
+  // Trail
+  if (Math.abs(player.vx) > 0.5) {
+    addTrail(player.x + player.w/2, player.y + player.h*0.6);
+  }
+
+  // Coin collection
+  const px = player.x, py = player.y, pw = player.w, ph = player.h;
+  worldCoins.forEach(c => {
+    if (c.collected) return;
+    if (rectOverlap(px, py, pw, ph, c.x-12, c.y-12, 24, 24)) {
+      c.collected = true;
+      sfxSparkle();
+      spawnParticles(c.x, c.y, 8, RAINBOW,
+        {speed:2, speedVar:2, decay:0.03, size:4, sizeVar:3, gravity:0.05, upBias:2, type:'star'});
+    }
+  });
+
+  // Treasure collection
+  if (!treasures[currentWorld]) {
+    const tx = world.treasureX, ty = world.treasureY;
+    if (rectOverlap(px, py, pw, ph, tx-18, ty-18, 36, 36)) {
+      treasures[currentWorld] = true;
+      sfxCollect();
+      collectAnim = { emoji: TREASURES[currentWorld].emoji, x: tx, y: ty, timer: 120 };
+      spawnParticles(tx, ty, 30, RAINBOW,
+        {speed:3, speedVar:4, decay:0.015, size:6, sizeVar:6, gravity:0.08, upBias:3, type:'star'});
+      spawnParticles(tx, ty, 20, GOLD,
+        {speed:2, speedVar:3, decay:0.018, size:5, sizeVar:4, gravity:0.06, upBias:2, type:'circle'});
+    }
+  }
+
+  // Portal
+  const portalX = world.portalX, portalY = world.portalY;
+  if (rectOverlap(px, py, pw, ph, portalX-22, portalY-60, 44, 70)) {
+    if (currentWorld < 6) {
+      sfxPortal();
+      spawnParticles(portalX, portalY-20, 20, RAINBOW,
+        {speed:3, speedVar:3, decay:0.02, size:5, sizeVar:4, gravity:0.04, upBias:3, type:'star'});
+      resetWorld(currentWorld + 1);
+    } else {
+      // Last world portal — check if all treasures collected
+      if (treasures.every(t => t)) {
+        gameState = 'ending';
+        endTimer = 0;
+        sfxCelebration();
+        spawnEndFireworks();
+      } else {
+        // Go back to collect remaining
+        sfxPortal();
+        resetWorld(0);
+      }
+    }
+  }
+
+  if (collectAnim) {
+    collectAnim.timer--;
+    if (collectAnim.timer <= 0) collectAnim = null;
+  }
+
+  updateParticles();
+}
+
+// =====================================================
+// BACKGROUND DRAWING FUNCTIONS
+// =====================================================
+
+function drawGrasslandBg(cx) {
+  // Sky
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, '#87CEEB');
+  grad.addColorStop(0.6, '#b0e0ff');
+  grad.addColorStop(1, '#d4f5a0');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // Distant hills (parallax ~0.2)
+  ctx.fillStyle = '#8fbe6a';
+  for (let i = 0; i < 6; i++) {
+    const hx = ((i*700 - cx*0.2) % (700*6) + 700*6) % (700*6);
+    ctx.beginPath();
+    ctx.arc(hx + 200, H-20, 260, Math.PI, 0);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#a0d46e';
+  for (let i = 0; i < 8; i++) {
+    const hx = ((i*500 - cx*0.3) % (500*8) + 500*8) % (500*8);
+    ctx.beginPath();
+    ctx.arc(hx + 100, H, 180, Math.PI, 0);
+    ctx.fill();
+  }
+
+  // Clouds (parallax ~0.5)
+  drawClouds(cx * 0.5, '#fff', 0.85);
+
+  // Sun
+  const sunX = 650 - cx*0.05;
+  ctx.fillStyle = '#FFD700';
+  ctx.beginPath();
+  ctx.arc(sunX, 70, 40, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#FFF176';
+  ctx.globalAlpha = 0.4;
+  ctx.beginPath();
+  ctx.arc(sunX, 70, 58, 0, Math.PI*2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Flowers on ground
+  const flowerColors = ['#ff69b4','#ff4500','#9400d3','#ffa500'];
+  for (let i = 0; i < 30; i++) {
+    const fx = ((i*165 - cx*1.0) % (165*30) + 165*30) % (165*30);
+    const fy = H-55 + (i%3)*4;
+    drawFlower(fx, fy, flowerColors[i%4], 7);
+  }
+}
+
+function drawFlower(x, y, color, r) {
+  ctx.fillStyle = '#5DBB63';
+  ctx.fillRect(x-1, y-12, 3, 14);
+  ctx.fillStyle = color;
+  for (let j = 0; j < 5; j++) {
+    const a = (j*72) * Math.PI/180;
+    ctx.beginPath();
+    ctx.arc(x + r*Math.cos(a), y + r*Math.sin(a), r*0.65, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#FFD700';
+  ctx.beginPath();
+  ctx.arc(x, y, r*0.45, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function drawClouds(offsetX, color, alpha) {
+  ctx.fillStyle = color;
+  ctx.globalAlpha = alpha;
+  const positions = [
+    [100,60,1.0],[350,40,0.8],[600,80,1.1],[900,50,0.9],
+    [1150,70,1.0],[1400,45,0.85],[200,120,0.7],[700,100,0.9],
+  ];
+  positions.forEach(([bx,by,s]) => {
+    const x = ((bx - offsetX) % (W*2) + W*2) % (W*2) - 100;
+    drawCloud(x, by, s);
+  });
+  ctx.globalAlpha = 1;
+}
+
+function drawCloud(x, y, s) {
+  ctx.beginPath();
+  ctx.arc(x, y, 30*s, 0, Math.PI*2);
+  ctx.arc(x+30*s, y-10*s, 22*s, 0, Math.PI*2);
+  ctx.arc(x+55*s, y, 25*s, 0, Math.PI*2);
+  ctx.arc(x+25*s, y+8*s, 20*s, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function drawSkyBg(cx) {
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, '#c8f0ff');
+  grad.addColorStop(0.5, '#e0f8ff');
+  grad.addColorStop(1, '#f5fcff');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // Many clouds at parallax layers
+  drawClouds(cx*0.2, '#ffffff', 0.7);
+  drawClouds(cx*0.4, '#e8f8ff', 0.5);
+  drawClouds(cx*0.6, '#d0f0ff', 0.6);
+
+  // Rainbow in background
+  const rainW = 400, rainCX = W/2 - cx*0.1;
+  const rc2 = ['#ff6b6b','#ffaa00','#ffff00','#55ff55','#4488ff','#aa44ff'];
+  rc2.forEach((c,i) => {
+    ctx.strokeStyle = c;
+    ctx.lineWidth = 14;
+    ctx.globalAlpha = 0.2;
+    ctx.beginPath();
+    ctx.arc(rainCX, H+50, rainW - i*22, Math.PI, 0);
+    ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function drawCaveBg(cx) {
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, '#120022');
+  grad.addColorStop(0.5, '#200033');
+  grad.addColorStop(1, '#0a0015');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // Glowing crystals on walls (parallax)
+  const ccolors = ['#00ffcc','#ff00ff','#4488ff','#ffaa00'];
+  for (let i = 0; i < 20; i++) {
+    const cx2 = ((i*250 - cx*0.7) % (250*20) + 250*20) % (250*20);
+    const cy2 = 60 + (i%5)*30;
+    const cc = ccolors[i%4];
+    drawCrystalSpike(cx2, cy2, cc, 8 + (i%3)*5);
+  }
+  // Bottom crystals
+  for (let i = 0; i < 15; i++) {
+    const cx2 = ((i*330 - cx*0.9) % (330*15) + 330*15) % (330*15);
+    const cc = ccolors[i%4];
+    drawCrystalSpike(cx2, H, cc, 10 + (i%4)*6, true);
+  }
+
+  // Glowing particles floating
+  ctx.globalAlpha = 0.3;
+  for (let i = 0; i < 12; i++) {
+    const gx = ((i*380 + levelTimer*0.3 - cx*0.8) % (W*6) + W*6) % (W*6);
+    const gy = 100 + Math.sin(levelTimer*0.02 + i) * 80 + i*20;
+    const gc = ccolors[i%4];
+    ctx.fillStyle = gc;
+    ctx.beginPath();
+    ctx.arc(gx % W + (gx > W ? W : 0), gy, 3 + Math.sin(i)*2, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawCrystalSpike(x, y, color, size, flip=false) {
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.7;
+  const dir = flip ? 1 : -1;
+  ctx.beginPath();
+  ctx.moveTo(x - size*0.4, y);
+  ctx.lineTo(x, y + dir*size*2.5);
+  ctx.lineTo(x + size*0.4, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(x - size*0.15, y);
+  ctx.lineTo(x - size*0.05, y + dir*size*1.5);
+  ctx.lineTo(x + size*0.1, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawNightBg(cx) {
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, '#00001a');
+  grad.addColorStop(0.5, '#000033');
+  grad.addColorStop(1, '#00004a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // Stars
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 80; i++) {
+    const sx = ((i*137 - cx*0.1) % (W*3) + W*3) % (W*3);
+    const sy = 20 + (i*73) % (H*0.7);
+    const ss = 0.5 + (i%4)*0.5;
+    const twinkle = 0.5 + 0.5*Math.sin(levelTimer*0.04 + i*0.7);
+    ctx.globalAlpha = twinkle * 0.8;
+    ctx.beginPath();
+    ctx.arc(sx % W, sy, ss, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Moon
+  const moonX = 680 - cx*0.05;
+  ctx.fillStyle = '#fffacd';
+  ctx.beginPath();
+  ctx.arc(moonX, 70, 45, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#fff9e6';
+  ctx.globalAlpha = 0.3;
+  ctx.beginPath();
+  ctx.arc(moonX, 70, 60, 0, Math.PI*2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  // Moon craters
+  ctx.fillStyle = '#ffe066';
+  ctx.globalAlpha = 0.3;
+  [[5,-12],[18,5],[-10,15]].forEach(([ox,oy]) => {
+    ctx.beginPath();
+    ctx.arc(moonX+ox, 70+oy, 7, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  // Shooting stars
+  for (let i = 0; i < 3; i++) {
+    const t = (levelTimer * 0.8 + i*120) % 300;
+    if (t < 60) {
+      const sx = (t/60) * W + i*150;
+      const sy = 30 + i*60 + t*0.4;
+      ctx.strokeStyle = '#ffffff';
+      ctx.globalAlpha = 1 - t/60;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx - 40, sy + 8);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+function drawForestBg(cx) {
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, '#001a00');
+  grad.addColorStop(0.5, '#002a00');
+  grad.addColorStop(1, '#003300');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // Glowing trees far (parallax 0.3)
+  const treeColors = ['#00ff88','#ff00ff','#00ffcc','#88ff00'];
+  for (let i = 0; i < 12; i++) {
+    const tx = ((i*420 - cx*0.3) % (420*12) + 420*12) % (420*12);
+    const tc = treeColors[i%4];
+    drawMagicTree(tx % W, H-40, tc, 1.0 + (i%3)*0.2, 0.2);
+  }
+  // Nearer trees
+  for (let i = 0; i < 8; i++) {
+    const tx = ((i*580 - cx*0.6) % (580*8) + 580*8) % (580*8);
+    const tc = treeColors[i%4];
+    drawMagicTree(tx % W, H-40, tc, 1.3 + (i%2)*0.3, 0.35);
+  }
+
+  // Fireflies
+  for (let i = 0; i < 15; i++) {
+    const fx = ((i*310 + Math.sin(levelTimer*0.02+i)*40 - cx*0.8) % (310*15) + 310*15) % (310*15);
+    const fy = 150 + Math.sin(levelTimer*0.03+i*1.3)*80 + i*14;
+    const fa = 0.4 + 0.6*Math.sin(levelTimer*0.08+i*0.9);
+    ctx.globalAlpha = fa;
+    ctx.fillStyle = '#ffffaa';
+    ctx.beginPath();
+    ctx.arc(fx % W, fy, 2.5, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawMagicTree(x, y, glowColor, scale, alpha) {
+  ctx.globalAlpha = alpha;
+  // Trunk
+  ctx.fillStyle = '#1a0a00';
+  ctx.fillRect(x-8*scale, y-80*scale, 16*scale, 80*scale);
+  // Canopy glow
+  const g = ctx.createRadialGradient(x, y-90*scale, 5, x, y-90*scale, 55*scale);
+  g.addColorStop(0, glowColor);
+  g.addColorStop(1, 'transparent');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y-90*scale, 55*scale, 0, Math.PI*2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawUnderwaterBg(cx) {
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, '#001a33');
+  grad.addColorStop(0.5, '#003366');
+  grad.addColorStop(1, '#001122');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // Light rays
+  ctx.globalAlpha = 0.07;
+  for (let i = 0; i < 8; i++) {
+    const rx = (i*130 - cx*0.1 + levelTimer*0.2) % (W+200) - 100;
+    ctx.fillStyle = '#88ccff';
+    ctx.beginPath();
+    ctx.moveTo(rx, 0);
+    ctx.lineTo(rx - 40, H);
+    ctx.lineTo(rx + 40, H);
+    ctx.lineTo(rx + 80, 0);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Bubbles
+  for (let i = 0; i < 20; i++) {
+    const bx = ((i*243 - cx*0.5) % (W*4) + W*4) % (W*4);
+    const by = H - (((levelTimer*0.5 + i*60) % H));
+    ctx.strokeStyle = 'rgba(100,200,255,0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(bx % W, by, 3 + (i%4)*2, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  // Coral and seaweed
+  const coralC = ['#ff6b88','#ff9966','#ff4488'];
+  for (let i = 0; i < 15; i++) {
+    const sx = ((i*330 - cx*0.9) % (330*15) + 330*15) % (330*15);
+    drawSeaweed(sx % W, H-40, coralC[i%3], 0.4 + (i%3)*0.2);
+  }
+}
+
+function drawSeaweed(x, y, color, scale) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 4*scale;
+  ctx.globalAlpha = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  for (let i = 0; i < 5; i++) {
+    const t = i/5;
+    const ox = Math.sin(levelTimer*0.04 + i*1.2) * 12*scale;
+    ctx.lineTo(x + ox, y - t*60*scale);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawCastleBg(cx) {
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, '#fff9e6');
+  grad.addColorStop(0.5, '#fffbf0');
+  grad.addColorStop(1, '#fff3cc');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // Distant castle towers (parallax 0.2)
+  const towerPositions = [0.15, 0.45, 0.75];
+  towerPositions.forEach(tp => {
+    const tx = (tp * 1200 - cx*0.2 + W*0.1) % (W*1.5);
+    drawCastleTower(tx, H*0.3, '#f0d060', 0.25);
+  });
+
+  // Rainbow bridges
+  const rc3 = ['#ff6b6b','#ffaa00','#ffff00','#55ff55','#4488ff','#aa44ff'];
+  rc3.forEach((c,i) => {
+    const bx = W/2 - cx*0.15;
+    ctx.strokeStyle = c;
+    ctx.lineWidth = 10;
+    ctx.globalAlpha = 0.15;
+    ctx.beginPath();
+    ctx.arc(bx, H+100, 400 - i*30, Math.PI, 0);
+    ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+
+  // Gold sparkle particles (fixed positions cycling)
+  for (let i = 0; i < 20; i++) {
+    const sx = ((i*247 - cx*0.4) % (W*3) + W*3) % (W*3);
+    const sy = 50 + (i*83) % (H*0.8);
+    const sa = 0.3 + 0.7*Math.abs(Math.sin(levelTimer*0.05 + i*0.6));
+    ctx.globalAlpha = sa * 0.6;
+    drawStar(sx % W, sy, 5, '#ffd700');
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawCastleTower(x, y, color, alpha) {
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  const tw = 60, th = H - y;
+  ctx.fillRect(x - tw/2, y, tw, th);
+  // Battlements
+  for (let i = 0; i < 4; i++) {
+    ctx.fillRect(x - tw/2 + i*16, y - 18, 12, 18);
+  }
+  // Window
+  ctx.fillStyle = '#88aaff';
+  ctx.fillRect(x - 8, y + 20, 16, 22);
+  ctx.globalAlpha = 1;
+}
+
+// =====================================================
+// PLATFORM DRAWING
+// =====================================================
+function drawPlatforms(plats, style, platColor, trimColor, cx) {
+  plats.forEach(p => {
+    const sx = p.x - cx;
+    if (sx + p.w < -20 || sx > W + 20) return;
+
+    switch (style) {
+      case 'cloud': drawCloudPlatform(sx, p.y, p.w, p.h); break;
+      case 'crystal': drawCrystalPlatform(sx, p.y, p.w, p.h, trimColor); break;
+      case 'star': drawStarPlatform(sx, p.y, p.w, p.h); break;
+      case 'mushroom': drawMushroomPlatform(sx, p.y, p.w, p.h, trimColor); break;
+      case 'coral': drawCoralPlatform(sx, p.y, p.w, p.h, trimColor); break;
+      case 'gold': drawGoldPlatform(sx, p.y, p.w, p.h); break;
+      default: drawGrassPlatform(sx, p.y, p.w, p.h, platColor, trimColor); break;
+    }
+  });
+}
+
+function drawGrassPlatform(x, y, w, h, color, trim) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, [8,8,4,4]);
+  ctx.fill();
+  // Trim
+  ctx.fillStyle = trim;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, 6, [8,8,0,0]);
+  ctx.fill();
+  // Grass tufts
+  ctx.fillStyle = '#7ee87e';
+  for (let i = 8; i < w-8; i += 14) {
+    ctx.beginPath();
+    ctx.arc(x+i, y, 4, Math.PI, 0);
+    ctx.fill();
+  }
+}
+
+function drawCloudPlatform(x, y, w, h) {
+  ctx.fillStyle = '#ffffff';
+  ctx.globalAlpha = 0.92;
+  // Main cloud body
+  const cy2 = y + h/2;
+  const puffs = Math.max(3, Math.floor(w/40));
+  for (let i = 0; i < puffs; i++) {
+    const px = x + (i+0.5)*(w/puffs);
+    const pr = 16 + (i%3)*4;
+    ctx.beginPath();
+    ctx.arc(px, cy2, pr, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.roundRect(x, cy2, w, h/2, [0,0,10,10]);
+  ctx.fill();
+  ctx.globalAlpha = 0.4;
+  ctx.strokeStyle = '#c0eeff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x+2, y+4, w-4, h-6, 8);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawCrystalPlatform(x, y, w, h, glowColor) {
+  // Base
+  ctx.fillStyle = '#2a0055';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 4);
+  ctx.fill();
+  // Crystal spikes on top
+  const spikes = Math.floor(w/20);
+  for (let i = 0; i < spikes; i++) {
+    const sx = x + (i+0.5)*(w/spikes);
+    ctx.fillStyle = glowColor;
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(sx-6, y);
+    ctx.lineTo(sx, y-12);
+    ctx.lineTo(sx+6, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Glow outline
+  ctx.globalAlpha = 0.5;
+  ctx.strokeStyle = glowColor;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 4);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawStarPlatform(x, y, w, h) {
+  // Dark base
+  ctx.fillStyle = '#1a1a4a';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 6);
+  ctx.fill();
+  // Gold stars on top
+  ctx.fillStyle = '#ffd700';
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, 4, [6,6,0,0]);
+  ctx.fill();
+  // Little stars decorating
+  const numStars = Math.floor(w/30);
+  for (let i = 0; i < numStars; i++) {
+    const sx = x + (i+0.5)*(w/numStars);
+    ctx.globalAlpha = 0.7;
+    drawStar(sx, y+10, 5, '#ffd700');
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawMushroomPlatform(x, y, w, h, glowColor) {
+  // Brown base
+  ctx.fillStyle = '#4a2200';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 4);
+  ctx.fill();
+  // Neon trim
+  ctx.fillStyle = glowColor;
+  ctx.globalAlpha = 0.7;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, 5, [4,4,0,0]);
+  ctx.fill();
+  // Dots
+  ctx.fillStyle = '#ffffff';
+  ctx.globalAlpha = 0.5;
+  const dots = Math.floor(w/25);
+  for (let i = 0; i < dots; i++) {
+    ctx.beginPath();
+    ctx.arc(x + (i+0.5)*(w/dots), y-3, 4, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawCoralPlatform(x, y, w, h, glowColor) {
+  ctx.fillStyle = '#004466';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 4);
+  ctx.fill();
+  // Coral bumps on top
+  ctx.fillStyle = glowColor;
+  ctx.globalAlpha = 0.7;
+  const bumps = Math.floor(w/18);
+  for (let i = 0; i < bumps; i++) {
+    const bx = x + (i+0.5)*(w/bumps);
+    ctx.beginPath();
+    ctx.arc(bx, y, 7, Math.PI, 0);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawGoldPlatform(x, y, w, h) {
+  const grd = ctx.createLinearGradient(x, y, x, y+h);
+  grd.addColorStop(0, '#ffd700');
+  grd.addColorStop(0.3, '#ffec47');
+  grd.addColorStop(1, '#b8860b');
+  ctx.fillStyle = grd;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 6);
+  ctx.fill();
+  // Shine
+  ctx.fillStyle = '#fff9c4';
+  ctx.globalAlpha = 0.3;
+  ctx.beginPath();
+  ctx.roundRect(x+4, y+2, w-8, 6, 3);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  // Outline
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 6);
+  ctx.stroke();
+}
+
+// =====================================================
+// UNICORN DRAWING
+// =====================================================
+function drawUnicorn(ux, uy, facingRight, walkFrame, bounceAnim, cx) {
+  const sx = ux - cx;
+  const sy = uy;
+  const bounceSin = Math.sin(bounceAnim) * 1.5;
+
+  ctx.save();
+  ctx.translate(sx + player.w/2, sy + player.h/2 + bounceSin);
+
+  if (!facingRight) ctx.scale(-1, 1);
+
+  // Scale relative to player rect
+  const s = 1.0;
+  ctx.scale(s, s);
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.beginPath();
+  ctx.ellipse(0, player.h/2 + 2, 22, 6, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Tail (behind body)
+  drawTail(walkFrame, bounceSin);
+
+  // Body
+  ctx.fillStyle = '#f8bbd0';
+  ctx.beginPath();
+  ctx.ellipse(0, 4, 22, 15, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Legs
+  const legOffsets = walkFrame === 0 ? [0,0,0,0] :
+                     walkFrame === 1 ? [4,-4,4,-4] :
+                     walkFrame === 2 ? [0,0,0,0] :
+                                       [-4,4,-4,4];
+  const legXs = [-13, -5, 5, 13];
+  legXs.forEach((lx, i) => {
+    const legY = 14 + legOffsets[i];
+    ctx.fillStyle = '#f48fb1';
+    ctx.beginPath();
+    ctx.roundRect(lx-4, legY, 8, 14+legOffsets[i], [2,2,4,4]);
+    ctx.fill();
+    // Hoof
+    ctx.fillStyle = '#f06292';
+    ctx.beginPath();
+    ctx.roundRect(lx-5, legY+11+legOffsets[i], 10, 4, [0,0,3,3]);
+    ctx.fill();
+  });
+
+  // Neck
+  ctx.fillStyle = '#f8bbd0';
+  ctx.beginPath();
+  ctx.ellipse(18, -8, 9, 14, 0.25, 0, Math.PI*2);
+  ctx.fill();
+
+  // Mane
+  drawMane(walkFrame, bounceSin);
+
+  // Head
+  ctx.fillStyle = '#f8bbd0';
+  ctx.beginPath();
+  ctx.ellipse(24, -17, 13, 11, 0.1, 0, Math.PI*2);
+  ctx.fill();
+
+  // Ear
+  ctx.fillStyle = '#f8bbd0';
+  ctx.beginPath();
+  ctx.moveTo(17, -26);
+  ctx.lineTo(13, -36);
+  ctx.lineTo(22, -27);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#f48fb1';
+  ctx.beginPath();
+  ctx.moveTo(17, -26);
+  ctx.lineTo(14, -33);
+  ctx.lineTo(21, -27);
+  ctx.closePath();
+  ctx.fill();
+
+  // Horn
+  const hornGrad = ctx.createLinearGradient(20, -28, 22, -46);
+  hornGrad.addColorStop(0, '#ffd54f');
+  hornGrad.addColorStop(1, '#fff9c4');
+  ctx.fillStyle = hornGrad;
+  ctx.beginPath();
+  ctx.moveTo(18, -28);
+  ctx.lineTo(22, -46);
+  ctx.lineTo(26, -28);
+  ctx.closePath();
+  ctx.fill();
+  // Horn spiral
+  ctx.strokeStyle = '#ffaa00';
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.5;
+  for (let i = 0; i < 3; i++) {
+    const t = i/3;
+    ctx.beginPath();
+    ctx.moveTo(18 + t*4, -28 - t*12);
+    ctx.lineTo(26 - t*4, -28 - t*12 - 5);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Snout
+  ctx.fillStyle = '#f48fb1';
+  ctx.beginPath();
+  ctx.ellipse(34, -14, 8, 6, 0.1, 0, Math.PI*2);
+  ctx.fill();
+  // Nostrils
+  ctx.fillStyle = '#e91e63';
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath(); ctx.ellipse(31, -13, 2, 1.5, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(36, -13, 2, 1.5, 0, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Eye white
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.ellipse(27, -20, 5.5, 6.5, 0.1, 0, Math.PI*2);
+  ctx.fill();
+  // Iris
+  ctx.fillStyle = '#7b1fa2';
+  ctx.beginPath();
+  ctx.ellipse(28, -19.5, 3.5, 4.5, 0.1, 0, Math.PI*2);
+  ctx.fill();
+  // Pupil
+  ctx.fillStyle = '#000000';
+  ctx.beginPath();
+  ctx.ellipse(28.5, -19, 2, 3, 0.1, 0, Math.PI*2);
+  ctx.fill();
+  // Eye sparkle
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(30, -21, 1.5, 0, Math.PI*2);
+  ctx.fill();
+  // Eyelashes
+  ctx.strokeStyle = '#7b1fa2';
+  ctx.lineWidth = 1.2;
+  [[22,-24,24,-22],[23,-25,26,-23],[25,-26,27,-24]].forEach(([x1,y1,x2,y2]) => {
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  });
+
+  // Cheek blush
+  ctx.fillStyle = '#ff4081';
+  ctx.globalAlpha = 0.25;
+  ctx.beginPath();
+  ctx.ellipse(33, -16, 5, 3, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+}
+
+const MANE_COLORS = ['#ff6b6b','#ff9800','#ffd700','#00e676','#40c4ff','#ea80fc'];
+
+function drawMane(walkFrame, bounceSin) {
+  const wave = Math.sin(walkFrame * 0.8 + bounceSin * 0.3) * 2;
+  MANE_COLORS.forEach((c, i) => {
+    ctx.strokeStyle = c;
+    ctx.lineWidth = 4.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    const startX = 15 - i*0.5;
+    const startY = -26 + i;
+    ctx.moveTo(startX, startY);
+    ctx.bezierCurveTo(
+      startX - 8 + wave,    startY + 6,
+      startX - 14 + wave/2, startY + 14,
+      startX - 10 - i,      startY + 22 + i
+    );
+    ctx.stroke();
+  });
+}
+
+function drawTail(walkFrame, bounceSin) {
+  const wave = Math.sin(walkFrame * 0.8 + bounceSin * 0.2) * 4;
+  MANE_COLORS.forEach((c, i) => {
+    ctx.strokeStyle = c;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-22 + i*0.5, 0 + i);
+    ctx.bezierCurveTo(
+      -32 + wave,     4 + i,
+      -36 + wave*1.2, 12 + i*1.5,
+      -28 + wave,     20 + i*1.5
+    );
+    ctx.stroke();
+  });
+}
+
+// =====================================================
+// TREASURE & PORTAL DRAWING
+// =====================================================
+function drawTreasure(tx, ty, worldIdx, cx) {
+  if (treasures[worldIdx]) return;
+  const sx = tx - cx;
+  const sy = ty;
+  const t = levelTimer;
+  const bob = Math.sin(t * 0.06) * 4;
+
+  // Glow
+  const glowR = ctx.createRadialGradient(sx, sy+bob, 2, sx, sy+bob, 30);
+  glowR.addColorStop(0, TREASURES[worldIdx].color + 'aa');
+  glowR.addColorStop(1, 'transparent');
+  ctx.fillStyle = glowR;
+  ctx.beginPath();
+  ctx.arc(sx, sy+bob, 30, 0, Math.PI*2);
+  ctx.fill();
+
+  // Sparkle ring
+  ctx.save();
+  ctx.translate(sx, sy+bob);
+  ctx.rotate(t * 0.04);
+  for (let i = 0; i < 6; i++) {
+    const a = (i/6)*Math.PI*2;
+    ctx.globalAlpha = 0.7;
+    drawStar(Math.cos(a)*22, Math.sin(a)*22, 5, TREASURES[worldIdx].color);
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+
+  // Emoji
+  ctx.font = '28px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(TREASURES[worldIdx].emoji, sx, sy+bob);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+}
+
+function drawPortal(px, py, worldIdx, cx) {
+  const sx = px - cx;
+  const sy = py;
+  const t = levelTimer;
+
+  // Portal glow
+  const colors = worldIdx < 6 ? RAINBOW : GOLD;
+  const grd = ctx.createRadialGradient(sx, sy-30, 5, sx, sy-30, 36);
+  grd.addColorStop(0, colors[t%colors.length]);
+  grd.addColorStop(1, 'transparent');
+  ctx.fillStyle = grd;
+  ctx.globalAlpha = 0.5 + 0.3*Math.sin(t*0.1);
+  ctx.beginPath();
+  ctx.arc(sx, sy-30, 36, 0, Math.PI*2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Portal ring
+  RAINBOW.forEach((c, i) => {
+    ctx.strokeStyle = c;
+    ctx.lineWidth = 4;
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.arc(sx, sy-30, 22 + i*0, 0, Math.PI*2);
+    ctx.stroke();
+    // Actually draw nested rings
+  });
+  ctx.globalAlpha = 1;
+
+  // Spinning ring
+  ctx.save();
+  ctx.translate(sx, sy-30);
+  ctx.rotate(t*0.05);
+  RAINBOW.forEach((c, i) => {
+    const a = (i/RAINBOW.length)*Math.PI*2;
+    ctx.fillStyle = c;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a)*22, Math.sin(a)*22, 4, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.restore();
+  ctx.globalAlpha = 1;
+
+  // Inner portal
+  const innerGrd = ctx.createRadialGradient(sx, sy-30, 0, sx, sy-30, 18);
+  innerGrd.addColorStop(0, 'rgba(255,255,255,0.9)');
+  innerGrd.addColorStop(0.5, worldIdx < 6 ? 'rgba(100,100,255,0.6)' : 'rgba(255,200,0,0.6)');
+  innerGrd.addColorStop(1, 'transparent');
+  ctx.fillStyle = innerGrd;
+  ctx.beginPath();
+  ctx.arc(sx, sy-30, 18, 0, Math.PI*2);
+  ctx.fill();
+
+  // Label
+  ctx.font = 'bold 11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffffff';
+  ctx.globalAlpha = 0.9;
+  ctx.fillText(worldIdx < 6 ? '→' + WORLDS[worldIdx+1].name : 'GOAL!', sx, sy-56);
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+}
+
+function drawCoins(coins, cx) {
+  coins.forEach(c => {
+    if (c.collected) return;
+    const sx = c.x - cx;
+    if (sx < -20 || sx > W+20) return;
+    const bob = Math.sin(levelTimer*0.08 + c.x*0.01) * 3;
+
+    // Glow
+    ctx.fillStyle = 'rgba(255,220,0,0.3)';
+    ctx.beginPath();
+    ctx.arc(sx, c.y+bob, 14, 0, Math.PI*2);
+    ctx.fill();
+
+    // Star
+    ctx.globalAlpha = 0.9;
+    drawStar(sx, c.y+bob, 8, '#ffd700');
+    ctx.globalAlpha = 1;
+  });
+}
+
+// =====================================================
+// HUD
+// =====================================================
+function drawHUD() {
+  const world = WORLDS[currentWorld];
+
+  // HUD bar background
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.roundRect(4, 4, W-8, 48, 10);
+  ctx.fill();
+
+  // Treasure slots
+  const slotW = 36, slotGap = 6;
+  const totalW = 7*slotW + 6*slotGap;
+  const startX = (W - totalW)/2;
+
+  for (let i = 0; i < 7; i++) {
+    const sx = startX + i*(slotW+slotGap);
+    const sy = 8;
+    const collected = treasures[i];
+
+    // Slot bg
+    ctx.fillStyle = collected ? 'rgba(255,220,50,0.35)' : 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.roundRect(sx, sy, slotW, slotW, 8);
+    ctx.fill();
+
+    // Border
+    ctx.strokeStyle = collected ? '#ffd700' : 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = collected ? 2.5 : 1;
+    ctx.beginPath();
+    ctx.roundRect(sx, sy, slotW, slotW, 8);
+    ctx.stroke();
+
+    // Emoji
+    ctx.font = '18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.globalAlpha = collected ? 1.0 : 0.3;
+    ctx.fillText(TREASURES[i].emoji, sx + slotW/2, sy + slotW/2);
+    ctx.globalAlpha = 1;
+
+    // Glow on collected
+    if (collected) {
+      ctx.fillStyle = 'rgba(255,220,50,0.15)';
+      ctx.beginPath();
+      ctx.roundRect(sx, sy, slotW, slotW, 8);
+      ctx.fill();
+    }
+  }
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+
+  // World name (left)
+  ctx.font = 'bold 13px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fillText(`${world.emoji} ${world.name}`, 14, 28);
+
+  // Count (right)
+  const count = treasures.filter(Boolean).length;
+  ctx.font = 'bold 12px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffd700';
+  ctx.fillText(`${count}/7 ✨`, W-14, 28);
+  ctx.textAlign = 'left';
+}
+
+// =====================================================
+// COLLECT ANIMATION
+// =====================================================
+function drawCollectAnim() {
+  if (!collectAnim) return;
+  const t = collectAnim.timer;
+  const sx = collectAnim.x - camera;
+  const sy = collectAnim.y - (120 - t)*0.6;
+  ctx.globalAlpha = Math.min(1, t/30);
+  ctx.font = `bold ${22 + (1 - t/120)*8}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(collectAnim.emoji + ' GET!', sx, sy - 20);
+  ctx.font = '14px sans-serif';
+  ctx.fillStyle = '#ffd700';
+  ctx.fillText(TREASURES[currentWorld].name, sx, sy);
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+}
+
+// =====================================================
+// TITLE SCREEN
+// =====================================================
+function drawTitle() {
+  // Background gradient
+  const grad = ctx.createLinearGradient(0,0,W,H);
+  grad.addColorStop(0, '#1a0044');
+  grad.addColorStop(0.4, '#2d006b');
+  grad.addColorStop(0.7, '#5b0099');
+  grad.addColorStop(1, '#ff6ec7');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // Stars
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 60; i++) {
+    const sx = (i*137 + 23) % W;
+    const sy = (i*83 + 17) % (H*0.7);
+    ctx.globalAlpha = 0.2 + 0.6*Math.abs(Math.sin(levelTimer*0.03 + i*0.5));
+    ctx.beginPath();
+    ctx.arc(sx, sy, 0.8 + (i%3)*0.6, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Rainbow arcs
+  const rainbowC = ['#ff6b6b','#ffa500','#ffd700','#69ff47','#00b4ff','#7c00ff'];
+  rainbowC.forEach((c,i) => {
+    ctx.strokeStyle = c;
+    ctx.lineWidth = 10;
+    ctx.globalAlpha = 0.18;
+    ctx.beginPath();
+    ctx.arc(W*0.5, H+60, 320 - i*30, Math.PI, 0);
+    ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+
+  // Title text
+  const pulse = 1 + 0.03*Math.sin(levelTimer*0.07);
+  ctx.save();
+  ctx.translate(W/2, H*0.22);
+  ctx.scale(pulse, pulse);
+
+  // Shadow
+  ctx.font = 'bold 46px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillText('🦄 ユニコーン', 3, 3);
+  ctx.fillText('アドベンチャー 🌈', 3, 56);
+
+  // Gradient text via clip trick
+  RAINBOW.forEach((c, i) => {
+    ctx.fillStyle = c;
+    ctx.globalAlpha = 0.9;
+  });
+  ctx.globalAlpha = 1;
+  // White title
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = '#ff9ff3';
+  ctx.shadowBlur = 18;
+  ctx.fillText('🦄 ユニコーン', 0, 0);
+  ctx.fillStyle = '#ffe082';
+  ctx.fillText('アドベンチャー 🌈', 0, 56);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // Subtitle
+  ctx.font = 'bold 16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffe082';
+  ctx.fillText('7つのたからを あつめよう！', W/2, H*0.5);
+
+  // Controls info
+  ctx.font = '13px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.fillText('← → いどう　↑ / スペース でジャンプ', W/2, H*0.62);
+
+  // Treasure preview
+  ctx.font = '22px sans-serif';
+  ctx.fillText('🌈⭐🔮🌙🌺💎👑', W/2, H*0.73);
+
+  // Start button
+  const btnW = 200, btnH = 50;
+  const btnX = W/2 - btnW/2, btnY = H*0.82;
+  const btnPulse = 1 + 0.05*Math.sin(levelTimer*0.12);
+  ctx.save();
+  ctx.translate(W/2, btnY + btnH/2);
+  ctx.scale(btnPulse, btnPulse);
+
+  const btnGrad = ctx.createLinearGradient(-btnW/2, -btnH/2, btnW/2, btnH/2);
+  btnGrad.addColorStop(0, '#ff6ec7');
+  btnGrad.addColorStop(0.5, '#ea80fc');
+  btnGrad.addColorStop(1, '#b388ff');
+  ctx.fillStyle = btnGrad;
+  ctx.shadowColor = '#ff9ff3';
+  ctx.shadowBlur = 20;
+  ctx.beginPath();
+  ctx.roundRect(-btnW/2, -btnH/2, btnW, btnH, 25);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 20px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('✨ はじめる ✨', 0, 0);
+  ctx.restore();
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+
+  // Floating particles
+  drawParticles(0);
+}
+
+// =====================================================
+// ENDING SCREEN
+// =====================================================
+function spawnEndFireworks() {
+  for (let i = 0; i < 8; i++) {
+    setTimeout(() => {
+      const x = 100 + Math.random()*(W-200);
+      const y = 50 + Math.random()*(H*0.5);
+      fireworks.push({x, y, timer:0});
+      spawnParticles(x, y, 40, CONFETTI,
+        {speed:4, speedVar:5, decay:0.012, size:6, sizeVar:6, gravity:0.1, upBias:2, type:'rect'});
+      spawnParticles(x, y, 25, GOLD,
+        {speed:3, speedVar:4, decay:0.015, size:5, sizeVar:4, gravity:0.08, upBias:2, type:'star'});
+    }, i*400);
+  }
+}
+
+function updateFireworks() {
+  endTimer++;
+  if (endTimer % 90 === 0 && endTimer < 1800) {
+    const x = 80 + Math.random()*(W-160);
+    const y = 40 + Math.random()*(H*0.45);
+    spawnParticles(x, y, 35, CONFETTI,
+      {speed:3, speedVar:5, decay:0.013, size:6, sizeVar:6, gravity:0.1, upBias:2, type:'rect'});
+    spawnParticles(x, y, 20, GOLD,
+      {speed:3, speedVar:4, decay:0.016, size:5, sizeVar:4, gravity:0.08, upBias:2, type:'star'});
+  }
+}
+
+function drawEnding() {
+  // Dark gradient bg
+  const grad = ctx.createLinearGradient(0,0,W,H);
+  grad.addColorStop(0, '#0a0020');
+  grad.addColorStop(0.5, '#1a0040');
+  grad.addColorStop(1, '#0a0020');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // Stars bg
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 80; i++) {
+    const sx = (i*137 + 23) % W;
+    const sy = (i*83 + 17) % H;
+    ctx.globalAlpha = 0.1 + 0.3*Math.abs(Math.sin(endTimer*0.04 + i*0.5));
+    ctx.beginPath();
+    ctx.arc(sx, sy, 0.8 + (i%3)*0.5, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Particles
+  drawParticles(0);
+
+  // Big おめでとう text
+  const scale = 1 + 0.04*Math.sin(endTimer*0.06);
+  ctx.save();
+  ctx.translate(W/2, H*0.22);
+  ctx.scale(scale, scale);
+  ctx.font = 'bold 52px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = '#ffd700';
+  ctx.shadowBlur = 30;
+  ctx.fillStyle = '#ffd700';
+  ctx.fillText('おめでとう！', 0, 0);
+  ctx.shadowBlur = 0;
+
+  ctx.font = '24px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('🎊🦄🎊', 0, 50);
+  ctx.restore();
+
+  // Subtitle
+  ctx.font = 'bold 16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffe082';
+  ctx.fillText('7つのたからを ぜんぶ あつめたよ！', W/2, H*0.42);
+
+  // Treasure display
+  const spacing = 46;
+  const totalW = 7*spacing;
+  const startX2 = (W - totalW)/2 + spacing/2;
+  for (let i = 0; i < 7; i++) {
+    const tx = startX2 + i*spacing;
+    const ty = H*0.54;
+    const glowPulse = 0.6 + 0.4*Math.sin(endTimer*0.08 + i*0.5);
+
+    // Glow
+    ctx.fillStyle = TREASURES[i].color;
+    ctx.globalAlpha = glowPulse * 0.4;
+    ctx.beginPath();
+    ctx.arc(tx, ty, 22, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Emoji
+    ctx.font = '26px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(TREASURES[i].emoji, tx, ty);
+
+    // Name
+    ctx.font = '9px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillText(TREASURES[i].name, tx, ty + 22);
+  }
+
+  // Replay button
+  const btnPulse = 1 + 0.05*Math.sin(endTimer*0.1);
+  ctx.save();
+  ctx.translate(W/2, H*0.82);
+  ctx.scale(btnPulse, btnPulse);
+
+  const btnGrad = ctx.createLinearGradient(-110, -28, 110, 28);
+  btnGrad.addColorStop(0, '#ff6ec7');
+  btnGrad.addColorStop(0.5, '#ea80fc');
+  btnGrad.addColorStop(1, '#b388ff');
+  ctx.fillStyle = btnGrad;
+  ctx.shadowColor = '#ff9ff3';
+  ctx.shadowBlur = 20;
+  ctx.beginPath();
+  ctx.roundRect(-110, -28, 220, 55, 28);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 18px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🔄 もう一度あそぶ', 0, 0);
+  ctx.restore();
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+}
+
+// =====================================================
+// CLICK / TAP HANDLING
+// =====================================================
+canvas.addEventListener('click', handleClick);
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const scaleY = H / rect.height;
+  const touch = e.changedTouches[0];
+  handleClick({
+    clientX: touch.clientX,
+    clientY: touch.clientY,
+    target: { getBoundingClientRect: () => rect }
+  }, scaleX, scaleY);
+}, {passive:false});
+
+function handleClick(e, scaleX, scaleY) {
+  const rect = canvas.getBoundingClientRect();
+  const sx = scaleX || W / rect.width;
+  const sy = scaleY || H / rect.height;
+  const mx = (e.clientX - rect.left) * sx;
+  const my = (e.clientY - rect.top) * sy;
+
+  if (gameState === 'title') {
+    // Check start button
+    const btnCX = W/2, btnCY = H*0.82 + 25;
+    if (Math.abs(mx - btnCX) < 110 && Math.abs(my - btnCY) < 30) {
+      getAudio();
+      startGame();
+    }
+  } else if (gameState === 'ending') {
+    // Check replay button
+    const btnCX = W/2, btnCY = H*0.82;
+    if (Math.abs(mx - btnCX) < 115 && Math.abs(my - btnCY) < 30) {
+      getAudio();
+      startGame();
+    }
+  }
+}
+
+function startGame() {
+  treasures = new Array(7).fill(false);
+  particles.length = 0;
+  trail.length = 0;
+  fireworks.length = 0;
+  endTimer = 0;
+  gameState = 'playing';
+  resetWorld(0);
+  sfxCollect();
+}
+
+// =====================================================
+// MAIN DRAW
+// =====================================================
+function draw() {
+  ctx.clearRect(0,0,W,H);
+
+  if (gameState === 'title') {
+    levelTimer++;
+    drawTitle();
+    return;
+  }
+
+  if (gameState === 'ending') {
+    drawEnding();
+    return;
+  }
+
+  const world = WORLDS[currentWorld];
+
+  // Background
+  world.drawBg(camera);
+
+  // Trail
+  drawTrail(camera);
+
+  // Coins
+  drawCoins(worldCoins, camera);
+
+  // Platforms
+  drawPlatforms(world.platforms, world.platStyle, world.platColor, world.platTrimColor, camera);
+
+  // Treasure
+  drawTreasure(world.treasureX, world.treasureY, currentWorld, camera);
+
+  // Portal
+  drawPortal(world.portalX, world.portalY, currentWorld, camera);
+
+  // Unicorn
+  drawUnicorn(player.x, player.y, player.facingRight, player.walkFrame, player.bounceAnim, camera);
+
+  // Particles
+  drawParticles(camera);
+
+  // Collect anim
+  drawCollectAnim();
+
+  // HUD
+  drawHUD();
+}
+
+// =====================================================
+// GAME LOOP
+// =====================================================
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// Start on title
+gameState = 'title';
+levelTimer = 0;
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
