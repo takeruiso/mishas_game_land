@@ -68,71 +68,76 @@
   }
   #title {
     color: white;
-    font-size: clamp(1rem, 3.5vw, 1.6rem);
+    font-size: clamp(.9rem, 3vw, 1.4rem);
     font-weight: 900;
     text-shadow: 0 2px 12px rgba(0,0,0,.5);
     letter-spacing: 2px;
     white-space: nowrap;
   }
-  #progress-wrap {
-    width: min(70vw, 380px);
-    height: 14px;
-    background: rgba(255,255,255,.2);
-    border-radius: 10px;
-    overflow: hidden;
-    border: 2px solid rgba(255,255,255,.3);
+
+  /* Unicorn counter */
+  #counter {
+    display: flex;
+    gap: 10px;
+    align-items: center;
   }
-  #progress-bar {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #ff6ec7, #ffd54f, #69f0ae);
-    border-radius: 10px;
-    transition: width .4s ease;
+  .counter-slot {
+    font-size: clamp(1.4rem, 5vw, 2rem);
+    filter: grayscale(1) opacity(.35);
+    transition: filter .4s, transform .4s;
+  }
+  .counter-slot.found {
+    filter: none;
+    transform: scale(1.25);
   }
 
-  /* Play field — eggs live here */
+  /* Play field */
   #field {
     position: fixed;
     inset: 0;
-    pointer-events: none; /* eggs handle their own events */
+    pointer-events: none;
   }
 
-  /* Each egg wrapper */
+  /* Each egg wrapper — stays visible even after breaking */
   .egg-wrap {
     position: absolute;
     pointer-events: all;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
-    /* size set by JS */
   }
 
-  .egg-wrap svg {
+  /* The egg SVG layer */
+  .egg-svg-layer {
+    width: 100%; height: 100%;
+    position: absolute;
+    inset: 0;
+    transition: opacity .3s, transform .3s;
+  }
+  .egg-svg-layer svg {
     width: 100%; height: 100%;
     filter: drop-shadow(0 4px 14px rgba(0,0,0,.35));
     transition: transform .12s;
   }
-  .egg-wrap:active svg { transform: scale(.88); }
+  .egg-wrap:active .egg-svg-layer svg { transform: scale(.88); }
 
   /* crack */
   .crack { opacity: 0; transition: opacity .2s; }
   .egg-wrap.cracked .crack { opacity: 1; }
 
-  /* broken → hide */
-  .egg-wrap.broken { visibility: hidden; pointer-events: none; }
+  /* broken → hide only the egg SVG layer */
+  .egg-wrap.broken .egg-svg-layer { opacity: 0; pointer-events: none; }
+  .egg-wrap.broken { pointer-events: none; }
 
-  /* stopped wobble: gentle idle bob via CSS (applied after JS stops) */
+  /* idle bob after stopping */
   @keyframes idleBob {
     from { transform: translateY(0px) rotate(-2deg); }
     to   { transform: translateY(-8px) rotate(2deg); }
   }
-  .egg-wrap.stopped {
-    animation: idleBob 1.8s ease-in-out infinite alternate;
-  }
-  .egg-wrap.cracked.stopped {
-    animation: idleBob 1.4s ease-in-out infinite alternate;
-  }
+  .egg-wrap.stopped { animation: idleBob 1.8s ease-in-out infinite alternate; }
+  .egg-wrap.cracked.stopped { animation: idleBob 1.2s ease-in-out infinite alternate; }
+  .egg-wrap.broken.stopped  { animation: none; }
 
-  /* Reveal popup */
+  /* Reveal popup — sits on top of egg position */
   .reveal {
     position: absolute;
     inset: 0;
@@ -140,21 +145,28 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: 2.4rem;
     opacity: 0;
-    transform: scale(0) rotate(-20deg);
+    transform: scale(0) rotate(-15deg);
     pointer-events: none;
-    transition: opacity .35s, transform .35s;
+    transition: opacity .4s, transform .4s;
+    z-index: 10;
   }
   .reveal.show { opacity: 1; transform: scale(1) rotate(0deg); }
-  .reveal span.name {
+
+  .reveal .reveal-emoji { font-size: 2.4rem; line-height: 1; }
+  .reveal .reveal-name {
     font-size: .6rem;
     color: white;
     font-weight: 700;
-    text-shadow: 0 1px 4px rgba(0,0,0,.6);
-    margin-top: 2px;
+    text-shadow: 0 1px 6px rgba(0,0,0,.7);
+    margin-top: 3px;
     letter-spacing: 1px;
+    text-align: center;
   }
+
+  /* Unicorn reveal: bigger + glow ring */
+  .reveal.unicorn-reveal .reveal-emoji { font-size: 3rem; }
+  .reveal.unicorn-reveal .reveal-name  { color: #ffd740; font-size: .7rem; }
 
   /* Particles */
   .particle {
@@ -169,17 +181,43 @@
     to   { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(0); }
   }
 
+  /* "みつけた！" flash */
+  #found-flash {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    z-index: 250;
+    background: rgba(255,215,64,.92);
+    border-radius: 28px;
+    padding: 18px 36px;
+    font-size: clamp(1.4rem, 6vw, 2.2rem);
+    font-weight: 900;
+    color: #7b1fa2;
+    text-shadow: 0 2px 8px rgba(0,0,0,.2);
+    letter-spacing: 2px;
+    pointer-events: none;
+    box-shadow: 0 4px 40px rgba(255,215,64,.6);
+    transition: transform .25s cubic-bezier(.34,1.56,.64,1), opacity .25s;
+    opacity: 0;
+    white-space: nowrap;
+  }
+  #found-flash.show {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+
   /* Finale overlay */
   #finale {
     position: fixed;
     inset: 0;
-    background: rgba(10,0,50,.85);
-    backdrop-filter: blur(6px);
+    background: rgba(10,0,50,.88);
+    backdrop-filter: blur(8px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 20px;
+    gap: 18px;
     z-index: 300;
     opacity: 0;
     pointer-events: none;
@@ -187,7 +225,7 @@
   }
   #finale.show { opacity: 1; pointer-events: all; }
   #finale .big-emoji {
-    font-size: clamp(4rem, 15vw, 7rem);
+    font-size: clamp(4rem, 14vw, 6rem);
     animation: bounce 1s ease-in-out infinite alternate;
   }
   @keyframes bounce {
@@ -195,17 +233,17 @@
     to   { transform: translateY(-18px); }
   }
   #finale h2 {
-    font-size: clamp(1.4rem, 5vw, 2.4rem);
+    font-size: clamp(1.3rem, 4.5vw, 2.2rem);
     font-weight: 900;
     color: white;
     text-align: center;
     text-shadow: 0 2px 16px #ff6ec7;
     letter-spacing: 2px;
-    line-height: 1.4;
+    line-height: 1.5;
   }
   #restart-btn {
-    padding: 14px 40px;
-    font-size: 1.2rem;
+    padding: 13px 38px;
+    font-size: 1.15rem;
     font-weight: 800;
     color: #7b1fa2;
     background: linear-gradient(135deg, #fff, #fce4ec);
@@ -216,7 +254,7 @@
     transition: transform .15s;
     letter-spacing: 1px;
   }
-  #restart-btn:hover { transform: scale(1.07); }
+  #restart-btn:hover  { transform: scale(1.07); }
   #restart-btn:active { transform: scale(.97); }
 </style>
 </head>
@@ -225,16 +263,22 @@
 <a class="home-btn" href="index.html">🏠 もどる</a>
 
 <div id="hud">
-  <div id="title">🥚 ユニコーンのたまごわり 🦄</div>
-  <div id="progress-wrap"><div id="progress-bar"></div></div>
+  <div id="title">🥚 ユニコーンを さがせ！</div>
+  <div id="counter">
+    <div class="counter-slot" id="slot0">🦄</div>
+    <div class="counter-slot" id="slot1">🦄</div>
+    <div class="counter-slot" id="slot2">🦄</div>
+  </div>
 </div>
 
 <div id="field"></div>
 
+<div id="found-flash"></div>
+
 <div id="finale">
-  <div class="big-emoji">🦄✨🌈</div>
-  <h2>すごい！<br>ぜんぶ わったよ！</h2>
-  <button id="restart-btn" onclick="restartGame()">もういちど あそぶ！</button>
+  <div class="big-emoji">🦄🦄🦄</div>
+  <h2>やったー！<br>ユニコーンを<br>ぜんぶ みつけたよ！</h2>
+  <button id="restart-btn" onclick="restartGame()">もういちど さがす！</button>
 </div>
 
 <script>
@@ -253,29 +297,51 @@ for (let i = 0; i < 40; i++) {
   document.body.appendChild(s);
 }
 
-// ---- Egg data ----
-const EGGS = [
-  { color: '#ff80ab', shine: '#ffcdd2', unicorn: '🦄', name: 'ももいろ' },
-  { color: '#ea80fc', shine: '#f3e5f5', unicorn: '🌟', name: 'むらさき' },
-  { color: '#82b1ff', shine: '#e3f2fd', unicorn: '🔵', name: 'あおいろ' },
-  { color: '#69f0ae', shine: '#e8f5e9', unicorn: '🌿', name: 'みどり'   },
-  { color: '#ffd740', shine: '#fffde7', unicorn: '⭐', name: 'きいろ'   },
-  { color: '#ff6e40', shine: '#fbe9e7', unicorn: '🔥', name: 'オレンジ' },
-  { color: '#84ffff', shine: '#e0f7fa', unicorn: '❄️', name: 'みずいろ' },
-  { color: '#ffffff', shine: '#f5f5f5', unicorn: '🌈', name: 'しろ'     },
-  { color: '#f06292', shine: '#fce4ec', unicorn: '💖', name: 'ピンク'   },
-  { color: '#7c4dff', shine: '#ede7f6', unicorn: '🔮', name: 'あい'     },
-  { color: '#ffab40', shine: '#fff8e1', unicorn: '🌙', name: 'こがね'   },
-  { color: '#40c4ff', shine: '#e1f5fe', unicorn: '💎', name: 'サファイア' },
+// ---- Egg shell colors (12 eggs) ----
+const EGG_SHELLS = [
+  { color: '#ff80ab', shine: '#ffcdd2' },
+  { color: '#ea80fc', shine: '#f3e5f5' },
+  { color: '#82b1ff', shine: '#e3f2fd' },
+  { color: '#69f0ae', shine: '#e8f5e9' },
+  { color: '#ffd740', shine: '#fffde7' },
+  { color: '#ff6e40', shine: '#fbe9e7' },
+  { color: '#84ffff', shine: '#e0f7fa' },
+  { color: '#ffffff', shine: '#f5f5f5' },
+  { color: '#f06292', shine: '#fce4ec' },
+  { color: '#7c4dff', shine: '#ede7f6' },
+  { color: '#ffab40', shine: '#fff8e1' },
+  { color: '#40c4ff', shine: '#e1f5fe' },
 ];
 
-const PARTICLES = ['✨','⭐','🌟','💫','🌸','🎀','🦋','🍭'];
-let broken = 0;
-const total = EGGS.length;
+// 3 unicorns hidden in the eggs
+const UNICORN_PRIZES = [
+  { emoji: '🦄', name: 'ユニコーン！' },
+  { emoji: '🌈🦄', name: 'にじいろ！' },
+  { emoji: '✨🦄', name: 'キラキラ！' },
+];
 
-// ---- SVG ----
+// Empty egg contents — cute but no unicorn
+const EMPTY_CONTENTS = ['💨','⭐','💫','🫧','🍃','☁️','🌸','💤','🌀','⬜'];
+
+const PARTICLES = ['✨','⭐','🌟','💫','🌸','🎀','🦋','🍭'];
+const TOTAL_UNICORNS = 3;
+let foundCount = 0;
+let actors = [];
+let rafId  = null;
+
+// ---- Helper: shuffle array ----
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ---- SVG egg ----
 function makeEggSVG(color, shine) {
-  const id = 'eg' + color.replace('#','');
+  const id = 'eg' + color.replace('#','') + Math.random().toString(36).slice(2,6);
   return `<svg viewBox="0 0 80 100" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <radialGradient id="${id}" cx="38%" cy="30%" r="65%">
@@ -296,84 +362,98 @@ function makeEggSVG(color, shine) {
   </svg>`;
 }
 
-// ---- Physics state ----
-// Each entry: { el, x, y, vx, vy, w, h, angle, av, stopAt, moving }
-let actors = [];
-let rafId  = null;
-
+// ---- Build game ----
 function buildGame() {
-  broken = 0;
-  updateProgress();
+  foundCount = 0;
   actors = [];
   if (rafId) cancelAnimationFrame(rafId);
+
+  // Reset counter slots
+  [0,1,2].forEach(i => document.getElementById('slot'+i).classList.remove('found'));
+
+  // Randomly assign 3 unicorn eggs among 12
+  const indices = shuffle([...Array(EGG_SHELLS.length).keys()]);
+  const unicornSet = new Set(indices.slice(0, TOTAL_UNICORNS));
 
   const field = document.getElementById('field');
   field.innerHTML = '';
 
   const VW = window.innerWidth;
   const VH = window.innerHeight;
-  // Egg size: fit 12 eggs comfortably
   const EGG_W = Math.min(Math.floor(VW / 6.5), 90);
   const EGG_H = Math.round(EGG_W * 1.33);
-  const HUD_H = 90; // leave room for HUD at top
+  const HUD_H = 90;
 
-  EGGS.forEach((egg, i) => {
-    // wrapper
+  // Build shuffled egg list (shell color also shuffled so position != color hint)
+  const shellOrder = shuffle([...Array(EGG_SHELLS.length).keys()]);
+
+  shellOrder.forEach((shellIdx, i) => {
+    const shell = EGG_SHELLS[shellIdx];
+    const isUnicorn = unicornSet.has(i);
+    const prize = isUnicorn
+      ? UNICORN_PRIZES[[...unicornSet].indexOf(i) % UNICORN_PRIZES.length]
+      : null;
+
+    // Wrapper
     const wrap = document.createElement('div');
     wrap.className = 'egg-wrap';
     wrap.style.width  = EGG_W + 'px';
     wrap.style.height = EGG_H + 'px';
-    wrap.innerHTML = makeEggSVG(egg.color, egg.shine);
     wrap.dataset.state = 'whole';
+    wrap.dataset.isUnicorn = isUnicorn ? '1' : '0';
 
-    // reveal
+    // SVG layer
+    const svgLayer = document.createElement('div');
+    svgLayer.className = 'egg-svg-layer';
+    svgLayer.innerHTML = makeEggSVG(shell.color, shell.shine);
+    wrap.appendChild(svgLayer);
+
+    // Reveal layer (hidden until broken)
     const rev = document.createElement('div');
-    rev.className = 'reveal';
-    rev.innerHTML = `<span>${egg.unicorn}</span><span class="name">${egg.name}</span>`;
+    rev.className = 'reveal' + (isUnicorn ? ' unicorn-reveal' : '');
+    if (isUnicorn) {
+      rev.innerHTML = `<span class="reveal-emoji">${prize.emoji}</span><span class="reveal-name">${prize.name}</span>`;
+    } else {
+      const emptyEmoji = EMPTY_CONTENTS[Math.floor(Math.random() * EMPTY_CONTENTS.length)];
+      rev.innerHTML = `<span class="reveal-emoji">${emptyEmoji}</span><span class="reveal-name">からっぽ…</span>`;
+    }
     wrap.appendChild(rev);
 
-    // events
-    wrap.addEventListener('click',      () => tapEgg(wrap, egg, i));
-    wrap.addEventListener('touchstart', e => { e.preventDefault(); tapEgg(wrap, egg, i); }, { passive: false });
+    // Events
+    wrap.addEventListener('click',      () => tapEgg(wrap, isUnicorn, prize, i));
+    wrap.addEventListener('touchstart', e => { e.preventDefault(); tapEgg(wrap, isUnicorn, prize, i); }, { passive: false });
 
     field.appendChild(wrap);
 
-    // random start position (avoid center clump)
+    // Physics
     const cols = 4, rows = 3;
     const col = i % cols, row = Math.floor(i / cols);
     const cellW = (VW - EGG_W) / cols;
     const cellH = (VH - HUD_H - EGG_H) / rows;
     const startX = col * cellW + Math.random() * cellW * 0.6;
     const startY = HUD_H + row * cellH + Math.random() * cellH * 0.5;
-
-    // random velocity
-    const speed = 1.2 + Math.random() * 2.0;
-    const angle = Math.random() * Math.PI * 2;
-
-    // each egg moves for a different duration (3–6 s)
+    const speed  = 1.2 + Math.random() * 2.0;
+    const ang    = Math.random() * Math.PI * 2;
     const stopAt = performance.now() + 3000 + Math.random() * 3000;
 
     actors.push({
-      el: wrap,
-      x: startX, y: startY,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
+      el: wrap, x: startX, y: startY,
+      vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed,
       w: EGG_W, h: EGG_H,
-      angle: (Math.random() - 0.5) * 20, // visual tilt degrees
-      av: (Math.random() - 0.5) * 1.2,   // angular velocity deg/frame
-      stopAt,
-      moving: true,
+      angle: (Math.random() - 0.5) * 20,
+      av: (Math.random() - 0.5) * 1.2,
+      stopAt, moving: true,
     });
 
-    wrap.style.left = startX + 'px';
-    wrap.style.top  = startY + 'px';
-    wrap.style.transform = `rotate(${actors[actors.length-1].angle}deg)`;
+    wrap.style.left      = startX + 'px';
+    wrap.style.top       = startY + 'px';
+    wrap.style.transform = `rotate(${actors[actors.length - 1].angle}deg)`;
   });
 
-  loop(performance.now());
+  rafId = requestAnimationFrame(loop);
 }
 
-// ---- Animation loop ----
+// ---- Physics loop ----
 function loop(now) {
   const VW = window.innerWidth;
   const VH = window.innerHeight;
@@ -382,31 +462,22 @@ function loop(now) {
   actors.forEach(a => {
     if (a.el.dataset.state === 'broken') return;
     if (!a.moving) return;
-
     anyMoving = true;
 
-    // decelerate after stopAt
     if (now >= a.stopAt) {
-      a.vx *= 0.90;
-      a.vy *= 0.90;
-      a.av *= 0.88;
+      a.vx *= 0.90; a.vy *= 0.90; a.av *= 0.88;
       if (Math.abs(a.vx) < 0.05 && Math.abs(a.vy) < 0.05) {
-        a.moving = false;
-        a.vx = 0; a.vy = 0; a.av = 0;
+        a.moving = false; a.vx = 0; a.vy = 0; a.av = 0;
         a.el.classList.add('stopped');
         return;
       }
     }
 
-    // move
-    a.x += a.vx;
-    a.y += a.vy;
-    a.angle += a.av;
+    a.x += a.vx; a.y += a.vy; a.angle += a.av;
 
-    // bounce off walls
-    if (a.x < 0)          { a.x = 0;          a.vx = Math.abs(a.vx); a.av *= -0.7; }
+    if (a.x < 0)          { a.x = 0;          a.vx =  Math.abs(a.vx); a.av *= -0.7; }
     if (a.x > VW - a.w)   { a.x = VW - a.w;   a.vx = -Math.abs(a.vx); a.av *= -0.7; }
-    if (a.y < 0)           { a.y = 0;          a.vy = Math.abs(a.vy); }
+    if (a.y < 0)           { a.y = 0;          a.vy =  Math.abs(a.vy); }
     if (a.y > VH - a.h)   { a.y = VH - a.h;   a.vy = -Math.abs(a.vy); }
 
     a.el.style.left      = a.x + 'px';
@@ -414,41 +485,65 @@ function loop(now) {
     a.el.style.transform = `rotate(${a.angle}deg)`;
   });
 
-  if (anyMoving) {
-    rafId = requestAnimationFrame(loop);
-  } else {
-    rafId = null;
-  }
+  rafId = anyMoving ? requestAnimationFrame(loop) : null;
 }
 
 // ---- Tap ----
-function tapEgg(wrap, egg, idx) {
+function tapEgg(wrap, isUnicorn, prize, idx) {
   if (wrap.dataset.state === 'whole') {
+    // First tap: crack + small bounce
     wrap.dataset.state = 'cracked';
     wrap.classList.add('cracked');
-    // shake in place
     const a = actors[idx];
-    if (a) { a.vx = (Math.random()-0.5)*3; a.vy = -2; a.moving = true; a.stopAt = performance.now() + 400; }
+    if (a) {
+      a.vx = (Math.random() - 0.5) * 3;
+      a.vy = -2;
+      a.moving = true;
+      a.stopAt = performance.now() + 400;
+      wrap.classList.remove('stopped');
+    }
     if (!rafId) rafId = requestAnimationFrame(loop);
     spawnParticlesAt(wrap, ['💥','✨'], 4);
     playClick(220, .08);
+
   } else if (wrap.dataset.state === 'cracked') {
+    // Second tap: break open
     wrap.dataset.state = 'broken';
-    wrap.classList.remove('stopped');
     wrap.classList.add('broken');
-    spawnParticlesAt(wrap, PARTICLES, 8);
-    playBreak();
+    // Stop idle animation
+    const a = actors[idx];
+    if (a) { a.moving = false; }
+
+    // Show reveal
     wrap.querySelector('.reveal').classList.add('show');
-    broken++;
-    updateProgress();
-    if (broken === total) setTimeout(showFinale, 900);
+
+    if (isUnicorn) {
+      // Unicorn found!
+      spawnParticlesAt(wrap, ['🦄','🌈','✨','⭐','🌟','💖','🎀','🎉'], 16);
+      playUnicornFanfare();
+      showFoundFlash(prize.emoji);
+      document.getElementById('slot' + foundCount).classList.add('found');
+      foundCount++;
+      if (foundCount === TOTAL_UNICORNS) {
+        setTimeout(showFinale, 1200);
+      }
+    } else {
+      // Empty — small puff
+      spawnParticlesAt(wrap, ['💨','⭐','💫'], 5);
+      playClick(180, .05);
+    }
   }
 }
 
-// ---- Progress ----
-function updateProgress() {
-  document.getElementById('progress-bar').style.width = (broken / total * 100) + '%';
+// ---- "みつけた！" flash ----
+function showFoundFlash(emoji) {
+  const el = document.getElementById('found-flash');
+  el.textContent = emoji + ' みつけた！';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1200);
 }
+
+// ---- Progress (counter slots handled above) ----
 
 // ---- Particles ----
 function spawnParticlesAt(el, icons, count) {
@@ -459,13 +554,13 @@ function spawnParticlesAt(el, icons, count) {
     const p = document.createElement('div');
     p.className = 'particle';
     p.textContent = icons[Math.floor(Math.random() * icons.length)];
-    const ang = Math.random() * Math.PI * 2;
-    const dist = 60 + Math.random() * 80;
+    const ang  = Math.random() * Math.PI * 2;
+    const dist = 60 + Math.random() * 100;
     p.style.setProperty('--dx', Math.cos(ang) * dist + 'px');
     p.style.setProperty('--dy', Math.sin(ang) * dist + 'px');
     p.style.left = cx + 'px';
     p.style.top  = cy + 'px';
-    p.style.animationDuration = (.6 + Math.random() * .5) + 's';
+    p.style.animationDuration = (.5 + Math.random() * .6) + 's';
     document.body.appendChild(p);
     p.addEventListener('animationend', () => p.remove());
   }
@@ -488,25 +583,25 @@ function playClick(freq, gain) {
     osc.start(); osc.stop(ac.currentTime + .18);
   } catch(e) {}
 }
-function playBreak() {
+function playUnicornFanfare() {
   try {
     const ac = getAudio();
-    [523, 659, 784, 1047].forEach((f, i) => {
+    [523, 659, 784, 1047, 1319].forEach((f, i) => {
       const osc = ac.createOscillator(), g = ac.createGain();
       osc.type = 'sine';
       osc.connect(g); g.connect(ac.destination);
-      osc.frequency.setValueAtTime(f, ac.currentTime + i * .07);
-      g.gain.setValueAtTime(.12, ac.currentTime + i * .07);
-      g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + i * .07 + .3);
-      osc.start(ac.currentTime + i * .07);
-      osc.stop(ac.currentTime + i * .07 + .3);
+      osc.frequency.setValueAtTime(f, ac.currentTime + i * .09);
+      g.gain.setValueAtTime(.15, ac.currentTime + i * .09);
+      g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + i * .09 + .28);
+      osc.start(ac.currentTime + i * .09);
+      osc.stop(ac.currentTime + i * .09 + .28);
     });
   } catch(e) {}
 }
 
 // ---- Finale ----
 function showFinale() {
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 40; i++) {
     setTimeout(() => {
       const fake = { getBoundingClientRect: () => ({
         left: Math.random() * window.innerWidth,
@@ -514,11 +609,11 @@ function showFinale() {
         width: 0, height: 0
       })};
       spawnParticlesAt(fake, ['🦄','🌈','✨','⭐','🌟','💖','🎉','🎀'], 3);
-    }, i * 60);
+    }, i * 55);
   }
   try {
     const ac = getAudio();
-    [523,659,784,1047,1175,1047,1175,1319].forEach((f, i) => {
+    [523,659,784,1047,1175,1047,1175,1319,1047,1319,1568].forEach((f, i) => {
       const osc = ac.createOscillator(), g = ac.createGain();
       osc.type = 'sine';
       osc.connect(g); g.connect(ac.destination);
