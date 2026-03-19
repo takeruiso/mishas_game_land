@@ -342,6 +342,16 @@ const GAMES = [
     thumbnail: 'adventure',
   },
   {
+    id: 'unicorn-egg',
+    title: '🥚 ユニコーンのたまごわり',
+    desc: 'カラフルなたまごを タップして わろう！なかから かわいい ユニコーンが とびだすよ！',
+    url: 'unicorn_egg.html',
+    tags: ['タップ', '3さい〜'],
+    badge: 'NEW!',
+    badgeClass: 'badge-new',
+    thumbnail: 'egg',
+  },
+  {
     id: 'coming-2',
     title: '🎵 おとあてクイズ',
     desc: 'どうぶつの なきごえや がっきの おとを あてよう！',
@@ -998,6 +1008,71 @@ function drawAdventureThumb(ctx, w, h) {
   drawStarT(ctx, w*.5, h*.3, 5, '#fff9c4');
 }
 
+function drawEggThumb(ctx, w, h) {
+  // Dreamy background
+  const bg = ctx.createLinearGradient(0, 0, w, h);
+  bg.addColorStop(0, '#1a0044');
+  bg.addColorStop(.5, '#5b0099');
+  bg.addColorStop(1, '#ff6ec7');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+
+  // Stars
+  const starPos = [[.08,.1],[.2,.06],[.5,.08],[.75,.05],[.9,.12],[.15,.4],[.85,.35],[.4,.2],[.65,.15]];
+  starPos.forEach(([sx, sy]) => {
+    ctx.fillStyle = 'rgba(255,255,255,' + (.3 + Math.random() * .4) + ')';
+    ctx.beginPath();
+    ctx.arc(sx * w, sy * h, 2 + Math.random() * 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Draw 6 colorful eggs in a 3x2 grid
+  const eggColors = [
+    ['#ff80ab','#ffcdd2'], ['#ea80fc','#f3e5f5'], ['#82b1ff','#e3f2fd'],
+    ['#69f0ae','#e8f5e9'], ['#ffd740','#fffde7'], ['#ff6e40','#fbe9e7'],
+  ];
+  const cols = 3, rows = 2;
+  const ew = w * .22, eh = ew * 1.28;
+  const gx = (w - cols * ew - (cols - 1) * w * .05) / 2;
+  const gy = h * .15;
+
+  eggColors.forEach(([col, shine], i) => {
+    const col_i = i % cols, row_i = Math.floor(i / cols);
+    const ex = gx + col_i * (ew + w * .05) + ew / 2;
+    const ey = gy + row_i * (eh + h * .06) + eh / 2;
+
+    // Egg body
+    const eg = ctx.createRadialGradient(ex - ew * .1, ey - eh * .2, eh * .05, ex, ey, eh * .6);
+    eg.addColorStop(0, shine);
+    eg.addColorStop(1, col);
+    ctx.fillStyle = eg;
+    ctx.beginPath();
+    ctx.ellipse(ex, ey, ew / 2, eh / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Shine
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    ctx.beginPath();
+    ctx.ellipse(ex - ew * .1, ey - eh * .18, ew * .13, eh * .18, -.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Sparkle
+    ctx.fillStyle = 'rgba(255,255,255,.6)';
+    ctx.font = `${w * .045}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('✦', ex + ew * .2, ey - eh * .28);
+  });
+
+  // Big sparkles overlay
+  ctx.font = `${w * .09}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('✨', w * .07, h * .88);
+  ctx.fillText('🌟', w * .93, h * .82);
+  ctx.fillText('🥚', w * .5, h * .92);
+}
+
 const thumbDrawers = {
   unicorn: drawUnicornThumb,
   coloring: drawColoringThumb,
@@ -1005,6 +1080,7 @@ const thumbDrawers = {
   numbers: drawNumbersThumb,
   fruitcatch: drawFruitCatchThumb,
   adventure: drawAdventureThumb,
+  egg: drawEggThumb,
 };
 
 GAMES.forEach(game => {
