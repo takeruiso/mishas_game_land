@@ -108,6 +108,11 @@
     background: none;
     padding: 0;
     -webkit-tap-highlight-color: transparent;
+    animation: eggFloat 2.4s ease-in-out infinite alternate;
+  }
+  @keyframes eggFloat {
+    from { transform: translateY(0px) rotate(-3deg); }
+    to   { transform: translateY(-12px) rotate(3deg); }
   }
 
   .egg-btn svg {
@@ -117,13 +122,22 @@
     transition: transform .15s;
   }
   .egg-btn:active svg { transform: scale(.92); }
+  /* タップ中はふわふわ止める */
+  .egg-btn:active { animation-play-state: paused; }
 
   /* Crack lines (hidden by default) */
   .crack { opacity: 0; transition: opacity .2s; }
   .egg-btn.cracked .crack { opacity: 1; }
 
   /* Broken egg = hide */
-  .egg-btn.broken { visibility: hidden; pointer-events: none; }
+  .egg-btn.broken { visibility: hidden; pointer-events: none; animation: none; }
+  /* ひびが入ったらぷるぷる震える */
+  .egg-btn.cracked { animation: eggShake .15s ease-in-out 3, eggFloat 2.4s ease-in-out infinite alternate 0.45s; }
+  @keyframes eggShake {
+    0%,100% { transform: translateX(0); }
+    25%     { transform: translateX(-5px) rotate(-4deg); }
+    75%     { transform: translateX(5px)  rotate(4deg);  }
+  }
 
   /* Unicorn reveal popup */
   .reveal {
@@ -315,6 +329,11 @@ function buildGrid() {
     btn.className = 'egg-btn';
     btn.dataset.state = 'whole'; // whole → cracked → broken
     btn.innerHTML = makeEggSVG(egg.color, egg.shine);
+    // 各たまごのアニメーションタイミングをずらす
+    const delay = -(i * 0.37 % 2.4);
+    const dur   = 1.8 + (i % 4) * 0.22;
+    btn.style.animationDelay    = delay + 's';
+    btn.style.animationDuration = dur + 's';
     btn.addEventListener('click', () => tapEgg(btn, egg, cell));
     btn.addEventListener('touchstart', e => { e.preventDefault(); tapEgg(btn, egg, cell); }, { passive: false });
 
