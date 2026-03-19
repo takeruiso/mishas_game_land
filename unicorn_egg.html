@@ -9,17 +9,12 @@
 
   body {
     font-family: 'Segoe UI', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
-    min-height: 100vh;
-    min-height: 100dvh;
+    width: 100vw; height: 100vh; height: 100dvh;
     overflow: hidden;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
     background: linear-gradient(160deg, #1a0044 0%, #5b0099 50%, #ff6ec7 100%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
   }
 
   /* Stars */
@@ -35,10 +30,10 @@
     to   { opacity: .9;  transform: scale(1.3); }
   }
 
+  /* Home button */
   .home-btn {
     position: fixed;
-    top: 12px;
-    left: 12px;
+    top: 12px; left: 12px;
     z-index: 100;
     display: inline-flex;
     align-items: center;
@@ -58,24 +53,32 @@
   }
   .home-btn:hover { transform: scale(1.06); }
 
-  /* Title */
+  /* HUD */
+  #hud {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+  }
   #title {
     color: white;
-    font-size: clamp(1.2rem, 4vw, 2rem);
+    font-size: clamp(1rem, 3.5vw, 1.6rem);
     font-weight: 900;
-    text-shadow: 0 2px 12px rgba(0,0,0,.4);
-    margin-bottom: 8px;
+    text-shadow: 0 2px 12px rgba(0,0,0,.5);
     letter-spacing: 2px;
-    text-align: center;
+    white-space: nowrap;
   }
-
-  /* Progress */
   #progress-wrap {
-    width: min(90vw, 500px);
-    height: 16px;
+    width: min(70vw, 380px);
+    height: 14px;
     background: rgba(255,255,255,.2);
     border-radius: 10px;
-    margin-bottom: 18px;
     overflow: hidden;
     border: 2px solid rgba(255,255,255,.3);
   }
@@ -87,59 +90,49 @@
     transition: width .4s ease;
   }
 
-  /* Egg grid */
-  #egg-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    width: min(92vw, 540px);
+  /* Play field — eggs live here */
+  #field {
+    position: fixed;
+    inset: 0;
+    pointer-events: none; /* eggs handle their own events */
   }
 
-  @media (max-width: 420px) {
-    #egg-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  }
-
-  /* Egg button */
-  .egg-btn {
-    aspect-ratio: 3/4;
-    position: relative;
+  /* Each egg wrapper */
+  .egg-wrap {
+    position: absolute;
+    pointer-events: all;
     cursor: pointer;
-    border: none;
-    background: none;
-    padding: 0;
     -webkit-tap-highlight-color: transparent;
-    animation: eggFloat 2.4s ease-in-out infinite alternate;
-  }
-  @keyframes eggFloat {
-    from { transform: translateY(0px) rotate(-3deg); }
-    to   { transform: translateY(-12px) rotate(3deg); }
+    /* size set by JS */
   }
 
-  .egg-btn svg {
-    width: 100%;
-    height: 100%;
-    filter: drop-shadow(0 4px 12px rgba(0,0,0,.3));
-    transition: transform .15s;
+  .egg-wrap svg {
+    width: 100%; height: 100%;
+    filter: drop-shadow(0 4px 14px rgba(0,0,0,.35));
+    transition: transform .12s;
   }
-  .egg-btn:active svg { transform: scale(.92); }
-  /* タップ中はふわふわ止める */
-  .egg-btn:active { animation-play-state: paused; }
+  .egg-wrap:active svg { transform: scale(.88); }
 
-  /* Crack lines (hidden by default) */
+  /* crack */
   .crack { opacity: 0; transition: opacity .2s; }
-  .egg-btn.cracked .crack { opacity: 1; }
+  .egg-wrap.cracked .crack { opacity: 1; }
 
-  /* Broken egg = hide */
-  .egg-btn.broken { visibility: hidden; pointer-events: none; animation: none; }
-  /* ひびが入ったらぷるぷる震える */
-  .egg-btn.cracked { animation: eggShake .15s ease-in-out 3, eggFloat 2.4s ease-in-out infinite alternate 0.45s; }
-  @keyframes eggShake {
-    0%,100% { transform: translateX(0); }
-    25%     { transform: translateX(-5px) rotate(-4deg); }
-    75%     { transform: translateX(5px)  rotate(4deg);  }
+  /* broken → hide */
+  .egg-wrap.broken { visibility: hidden; pointer-events: none; }
+
+  /* stopped wobble: gentle idle bob via CSS (applied after JS stops) */
+  @keyframes idleBob {
+    from { transform: translateY(0px) rotate(-2deg); }
+    to   { transform: translateY(-8px) rotate(2deg); }
+  }
+  .egg-wrap.stopped {
+    animation: idleBob 1.8s ease-in-out infinite alternate;
+  }
+  .egg-wrap.cracked.stopped {
+    animation: idleBob 1.4s ease-in-out infinite alternate;
   }
 
-  /* Unicorn reveal popup */
+  /* Reveal popup */
   .reveal {
     position: absolute;
     inset: 0;
@@ -147,18 +140,15 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: 2.8rem;
+    font-size: 2.4rem;
     opacity: 0;
     transform: scale(0) rotate(-20deg);
     pointer-events: none;
     transition: opacity .35s, transform .35s;
   }
-  .reveal.show {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-  }
+  .reveal.show { opacity: 1; transform: scale(1) rotate(0deg); }
   .reveal span.name {
-    font-size: .65rem;
+    font-size: .6rem;
     color: white;
     font-weight: 700;
     text-shadow: 0 1px 4px rgba(0,0,0,.6);
@@ -166,7 +156,7 @@
     letter-spacing: 1px;
   }
 
-  /* Sparkle particles */
+  /* Particles */
   .particle {
     position: fixed;
     pointer-events: none;
@@ -196,7 +186,6 @@
     transition: opacity .5s;
   }
   #finale.show { opacity: 1; pointer-events: all; }
-
   #finale .big-emoji {
     font-size: clamp(4rem, 15vw, 7rem);
     animation: bounce 1s ease-in-out infinite alternate;
@@ -205,7 +194,6 @@
     from { transform: translateY(0); }
     to   { transform: translateY(-18px); }
   }
-
   #finale h2 {
     font-size: clamp(1.4rem, 5vw, 2.4rem);
     font-weight: 900;
@@ -215,7 +203,6 @@
     letter-spacing: 2px;
     line-height: 1.4;
   }
-
   #restart-btn {
     padding: 14px 40px;
     font-size: 1.2rem;
@@ -226,10 +213,10 @@
     border-radius: 50px;
     cursor: pointer;
     box-shadow: 0 4px 20px rgba(255,110,199,.5);
-    transition: transform .15s, box-shadow .15s;
+    transition: transform .15s;
     letter-spacing: 1px;
   }
-  #restart-btn:hover { transform: scale(1.07); box-shadow: 0 6px 28px rgba(255,110,199,.7); }
+  #restart-btn:hover { transform: scale(1.07); }
   #restart-btn:active { transform: scale(.97); }
 </style>
 </head>
@@ -237,13 +224,12 @@
 
 <a class="home-btn" href="index.html">🏠 もどる</a>
 
-<!-- Stars injected by JS -->
+<div id="hud">
+  <div id="title">🥚 ユニコーンのたまごわり 🦄</div>
+  <div id="progress-wrap"><div id="progress-bar"></div></div>
+</div>
 
-<div id="title">🥚 ユニコーンのたまごわり 🦄</div>
-
-<div id="progress-wrap"><div id="progress-bar"></div></div>
-
-<div id="egg-grid"></div>
+<div id="field"></div>
 
 <div id="finale">
   <div class="big-emoji">🦄✨🌈</div>
@@ -287,89 +273,175 @@ const PARTICLES = ['✨','⭐','🌟','💫','🌸','🎀','🦋','🍭'];
 let broken = 0;
 const total = EGGS.length;
 
-// ---- Build SVG egg ----
+// ---- SVG ----
 function makeEggSVG(color, shine) {
-  return `
-  <svg viewBox="0 0 80 100" xmlns="http://www.w3.org/2000/svg">
+  const id = 'eg' + color.replace('#','');
+  return `<svg viewBox="0 0 80 100" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <radialGradient id="eg${color.replace('#','')}" cx="38%" cy="30%" r="65%">
-        <stop offset="0%"   stop-color="${shine}"/>
+      <radialGradient id="${id}" cx="38%" cy="30%" r="65%">
+        <stop offset="0%" stop-color="${shine}"/>
         <stop offset="100%" stop-color="${color}"/>
       </radialGradient>
     </defs>
-    <!-- Egg body -->
-    <ellipse cx="40" cy="56" rx="32" ry="42" fill="url(#eg${color.replace('#','')})"/>
-    <!-- Shine -->
+    <ellipse cx="40" cy="56" rx="32" ry="42" fill="url(#${id})"/>
     <ellipse cx="28" cy="36" rx="9" ry="14" fill="white" opacity=".35" transform="rotate(-20 28 36)"/>
-    <!-- Crack lines (hidden until cracked) -->
     <g class="crack" stroke="#9c4040" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".7">
       <polyline points="40,30 36,42 44,50 38,62"/>
       <polyline points="44,50 52,48"/>
       <polyline points="36,42 28,44"/>
     </g>
-    <!-- Star sparkles on egg -->
     <text x="50" y="28" font-size="10" opacity=".5">✦</text>
     <text x="18" y="70" font-size="7"  opacity=".4">✦</text>
     <text x="55" y="72" font-size="8"  opacity=".35">✦</text>
   </svg>`;
 }
 
-// ---- Build grid ----
-function buildGrid() {
+// ---- Physics state ----
+// Each entry: { el, x, y, vx, vy, w, h, angle, av, stopAt, moving }
+let actors = [];
+let rafId  = null;
+
+function buildGame() {
   broken = 0;
   updateProgress();
-  const grid = document.getElementById('egg-grid');
-  grid.innerHTML = '';
+  actors = [];
+  if (rafId) cancelAnimationFrame(rafId);
+
+  const field = document.getElementById('field');
+  field.innerHTML = '';
+
+  const VW = window.innerWidth;
+  const VH = window.innerHeight;
+  // Egg size: fit 12 eggs comfortably
+  const EGG_W = Math.min(Math.floor(VW / 6.5), 90);
+  const EGG_H = Math.round(EGG_W * 1.33);
+  const HUD_H = 90; // leave room for HUD at top
 
   EGGS.forEach((egg, i) => {
-    const cell = document.createElement('div');
-    cell.style.position = 'relative';
+    // wrapper
+    const wrap = document.createElement('div');
+    wrap.className = 'egg-wrap';
+    wrap.style.width  = EGG_W + 'px';
+    wrap.style.height = EGG_H + 'px';
+    wrap.innerHTML = makeEggSVG(egg.color, egg.shine);
+    wrap.dataset.state = 'whole';
 
-    const btn = document.createElement('button');
-    btn.className = 'egg-btn';
-    btn.dataset.state = 'whole'; // whole → cracked → broken
-    btn.innerHTML = makeEggSVG(egg.color, egg.shine);
-    // 各たまごのアニメーションタイミングをずらす
-    const delay = -(i * 0.37 % 2.4);
-    const dur   = 1.8 + (i % 4) * 0.22;
-    btn.style.animationDelay    = delay + 's';
-    btn.style.animationDuration = dur + 's';
-    btn.addEventListener('click', () => tapEgg(btn, egg, cell));
-    btn.addEventListener('touchstart', e => { e.preventDefault(); tapEgg(btn, egg, cell); }, { passive: false });
-
-    // Reveal layer
+    // reveal
     const rev = document.createElement('div');
     rev.className = 'reveal';
     rev.innerHTML = `<span>${egg.unicorn}</span><span class="name">${egg.name}</span>`;
+    wrap.appendChild(rev);
 
-    cell.appendChild(btn);
-    cell.appendChild(rev);
-    grid.appendChild(cell);
+    // events
+    wrap.addEventListener('click',      () => tapEgg(wrap, egg, i));
+    wrap.addEventListener('touchstart', e => { e.preventDefault(); tapEgg(wrap, egg, i); }, { passive: false });
+
+    field.appendChild(wrap);
+
+    // random start position (avoid center clump)
+    const cols = 4, rows = 3;
+    const col = i % cols, row = Math.floor(i / cols);
+    const cellW = (VW - EGG_W) / cols;
+    const cellH = (VH - HUD_H - EGG_H) / rows;
+    const startX = col * cellW + Math.random() * cellW * 0.6;
+    const startY = HUD_H + row * cellH + Math.random() * cellH * 0.5;
+
+    // random velocity
+    const speed = 1.2 + Math.random() * 2.0;
+    const angle = Math.random() * Math.PI * 2;
+
+    // each egg moves for a different duration (3–6 s)
+    const stopAt = performance.now() + 3000 + Math.random() * 3000;
+
+    actors.push({
+      el: wrap,
+      x: startX, y: startY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      w: EGG_W, h: EGG_H,
+      angle: (Math.random() - 0.5) * 20, // visual tilt degrees
+      av: (Math.random() - 0.5) * 1.2,   // angular velocity deg/frame
+      stopAt,
+      moving: true,
+    });
+
+    wrap.style.left = startX + 'px';
+    wrap.style.top  = startY + 'px';
+    wrap.style.transform = `rotate(${actors[actors.length-1].angle}deg)`;
   });
+
+  loop(performance.now());
 }
 
-// ---- Tap logic ----
-function tapEgg(btn, egg, cell) {
-  if (btn.dataset.state === 'whole') {
-    // First tap → crack
-    btn.classList.add('cracked');
-    btn.dataset.state = 'cracked';
-    spawnParticles(btn, ['💥','✨'], 4);
+// ---- Animation loop ----
+function loop(now) {
+  const VW = window.innerWidth;
+  const VH = window.innerHeight;
+  let anyMoving = false;
+
+  actors.forEach(a => {
+    if (a.el.dataset.state === 'broken') return;
+    if (!a.moving) return;
+
+    anyMoving = true;
+
+    // decelerate after stopAt
+    if (now >= a.stopAt) {
+      a.vx *= 0.90;
+      a.vy *= 0.90;
+      a.av *= 0.88;
+      if (Math.abs(a.vx) < 0.05 && Math.abs(a.vy) < 0.05) {
+        a.moving = false;
+        a.vx = 0; a.vy = 0; a.av = 0;
+        a.el.classList.add('stopped');
+        return;
+      }
+    }
+
+    // move
+    a.x += a.vx;
+    a.y += a.vy;
+    a.angle += a.av;
+
+    // bounce off walls
+    if (a.x < 0)          { a.x = 0;          a.vx = Math.abs(a.vx); a.av *= -0.7; }
+    if (a.x > VW - a.w)   { a.x = VW - a.w;   a.vx = -Math.abs(a.vx); a.av *= -0.7; }
+    if (a.y < 0)           { a.y = 0;          a.vy = Math.abs(a.vy); }
+    if (a.y > VH - a.h)   { a.y = VH - a.h;   a.vy = -Math.abs(a.vy); }
+
+    a.el.style.left      = a.x + 'px';
+    a.el.style.top       = a.y + 'px';
+    a.el.style.transform = `rotate(${a.angle}deg)`;
+  });
+
+  if (anyMoving) {
+    rafId = requestAnimationFrame(loop);
+  } else {
+    rafId = null;
+  }
+}
+
+// ---- Tap ----
+function tapEgg(wrap, egg, idx) {
+  if (wrap.dataset.state === 'whole') {
+    wrap.dataset.state = 'cracked';
+    wrap.classList.add('cracked');
+    // shake in place
+    const a = actors[idx];
+    if (a) { a.vx = (Math.random()-0.5)*3; a.vy = -2; a.moving = true; a.stopAt = performance.now() + 400; }
+    if (!rafId) rafId = requestAnimationFrame(loop);
+    spawnParticlesAt(wrap, ['💥','✨'], 4);
     playClick(220, .08);
-  } else if (btn.dataset.state === 'cracked') {
-    // Second tap → break
-    btn.dataset.state = 'broken';
-    btn.classList.add('broken');
-    spawnParticles(btn, PARTICLES, 8);
-    playBreak(egg.color);
-    // Show reveal
-    const rev = cell.querySelector('.reveal');
-    rev.classList.add('show');
+  } else if (wrap.dataset.state === 'cracked') {
+    wrap.dataset.state = 'broken';
+    wrap.classList.remove('stopped');
+    wrap.classList.add('broken');
+    spawnParticlesAt(wrap, PARTICLES, 8);
+    playBreak();
+    wrap.querySelector('.reveal').classList.add('show');
     broken++;
     updateProgress();
-    if (broken === total) {
-      setTimeout(showFinale, 900);
-    }
+    if (broken === total) setTimeout(showFinale, 900);
   }
 }
 
@@ -379,18 +451,18 @@ function updateProgress() {
 }
 
 // ---- Particles ----
-function spawnParticles(btn, icons, count) {
-  const rect = btn.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
+function spawnParticlesAt(el, icons, count) {
+  const rect = el.getBoundingClientRect();
+  const cx = rect.left + rect.width  / 2;
   const cy = rect.top  + rect.height / 2;
   for (let i = 0; i < count; i++) {
     const p = document.createElement('div');
     p.className = 'particle';
     p.textContent = icons[Math.floor(Math.random() * icons.length)];
-    const angle = Math.random() * Math.PI * 2;
-    const dist  = 60 + Math.random() * 80;
-    p.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
-    p.style.setProperty('--dy', Math.sin(angle) * dist + 'px');
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 60 + Math.random() * 80;
+    p.style.setProperty('--dx', Math.cos(ang) * dist + 'px');
+    p.style.setProperty('--dy', Math.sin(ang) * dist + 'px');
     p.style.left = cx + 'px';
     p.style.top  = cy + 'px';
     p.style.animationDuration = (.6 + Math.random() * .5) + 's';
@@ -399,7 +471,7 @@ function spawnParticles(btn, icons, count) {
   }
 }
 
-// ---- Sound (Web Audio API) ----
+// ---- Sound ----
 let audioCtx = null;
 function getAudio() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -408,8 +480,7 @@ function getAudio() {
 function playClick(freq, gain) {
   try {
     const ac = getAudio();
-    const osc = ac.createOscillator();
-    const g   = ac.createGain();
+    const osc = ac.createOscillator(), g = ac.createGain();
     osc.connect(g); g.connect(ac.destination);
     osc.frequency.setValueAtTime(freq, ac.currentTime);
     g.gain.setValueAtTime(gain, ac.currentTime);
@@ -420,10 +491,8 @@ function playClick(freq, gain) {
 function playBreak() {
   try {
     const ac = getAudio();
-    const notes = [523, 659, 784, 1047]; // C5 E5 G5 C6
-    notes.forEach((f, i) => {
-      const osc = ac.createOscillator();
-      const g   = ac.createGain();
+    [523, 659, 784, 1047].forEach((f, i) => {
+      const osc = ac.createOscillator(), g = ac.createGain();
       osc.type = 'sine';
       osc.connect(g); g.connect(ac.destination);
       osc.frequency.setValueAtTime(f, ac.currentTime + i * .07);
@@ -437,7 +506,6 @@ function playBreak() {
 
 // ---- Finale ----
 function showFinale() {
-  // Big confetti burst
   for (let i = 0; i < 30; i++) {
     setTimeout(() => {
       const fake = { getBoundingClientRect: () => ({
@@ -445,16 +513,13 @@ function showFinale() {
         top:  Math.random() * window.innerHeight * .6,
         width: 0, height: 0
       })};
-      spawnParticles(fake, ['🦄','🌈','✨','⭐','🌟','💖','🎉','🎀'], 3);
+      spawnParticlesAt(fake, ['🦄','🌈','✨','⭐','🌟','💖','🎉','🎀'], 3);
     }, i * 60);
   }
-  // Play fanfare
   try {
     const ac = getAudio();
-    const fanfare = [523,659,784,1047,1175,1047,1175,1319];
-    fanfare.forEach((f, i) => {
-      const osc = ac.createOscillator();
-      const g   = ac.createGain();
+    [523,659,784,1047,1175,1047,1175,1319].forEach((f, i) => {
+      const osc = ac.createOscillator(), g = ac.createGain();
       osc.type = 'sine';
       osc.connect(g); g.connect(ac.destination);
       osc.frequency.setValueAtTime(f, ac.currentTime + i * .11);
@@ -469,11 +534,11 @@ function showFinale() {
 
 function restartGame() {
   document.getElementById('finale').classList.remove('show');
-  buildGrid();
+  buildGame();
 }
 
 // ---- Init ----
-buildGrid();
+buildGame();
 </script>
 </body>
 </html>
