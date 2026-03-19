@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🦄 トランポリンジャンプ</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Segoe UI', 'Hiragino Sans', sans-serif;
+  background: #87CEEB;
+}
+canvas { display: block; flex: 1; width: 100%; }
+.bottom-bar {
+  background: #1a1a2e;
+  height: 110px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+.jump-btn {
+  width: 180px;
+  height: 72px;
+  border-radius: 36px;
+  border: none;
+  font-size: 1.7rem;
+  font-weight: 900;
+  cursor: pointer;
+  color: #4a148c;
+  background: linear-gradient(135deg, #ffd54f, #ffb300);
+  box-shadow: 0 6px 22px rgba(255,200,50,.55), 0 2px 8px rgba(0,0,0,.3);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: transform .1s, box-shadow .1s;
+  letter-spacing: 2px;
+}
+.jump-btn:active { transform: scale(.88); box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+.jump-btn:disabled {
+  background: linear-gradient(135deg, #bdbdbd, #9e9e9e);
+  box-shadow: none; color: #777; cursor: not-allowed;
+}
+.home-btn {
+  position: fixed;
+  top: 10px; left: 10px; z-index: 50;
+  padding: 7px 13px; font-size: .82rem; font-weight: 700;
+  color: #7b1fa2; background: rgba(255,255,255,.88);
+  border: 2px solid #ce93d8; border-radius: 22px; cursor: pointer;
+  text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+.home-btn:active { transform: scale(.95); }
+</style>
+</head>
+<body>
+
+<a href="index.html" class="home-btn">🏰 もどる</a>
+<canvas id="game"></canvas>
+<div class="bottom-bar">
+  <button class="jump-btn" id="jumpBtn">🌟 ジャンプ！</button>
+</div>
+
+<script>
+const canvas  = document.getElementById('game');
+const ctx     = canvas.getContext('2d');
+const jumpBtn = document.getElementById('jumpBtn');
+
+// roundRect polyfill
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r) {
+    if (typeof r==='number') r=[r,r,r,r];
+    this.moveTo(x+r[0],y); this.lineTo(x+w-r[1],y);
+    this.quadraticCurveTo(x+w,y,x+w,y+r[1]);
+    this.lineTo(x+w,y+h-r[2]); this.quadraticCurveTo(x+w,y+h,x+w-r[2],y+h);
+    this.lineTo(x+r[3],y+h); this.quadraticCurveTo(x,y+h,x,y+h-r[3]);
+    this.lineTo(x,y+r[0]); this.quadraticCurveTo(x,y,x+r[0],y); this.closePath();
+  };
+}
+
+// ===== RESIZE =====
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 110; }
+resize();
+window.addEventListener('resize', () => { resize(); resetUnicorn(); });
+
+// ===== DIMENSIONS =====
+function W()        { return canvas.width; }
+function H()        { return canvas.height; }
+function GROUND_Y() { return H() * 0.64; }       // ground surface y
+function TRAM_X()   { return W() * 0.18; }        // trampoline center x
+function TRAM_TOP() { return GROUND_Y() - H()*0.03; } // trampoline mat y
+function CAR_H()    { return H() * 0.13; }        // car height
+function CAR_TOP()  { return GROUND_Y() - CAR_H(); }  // car roof y
+const GRAVITY  = 0.55;
+const AUTO_VY  = -8;   // small auto-bounce velocity
+const BIG_VY   = -16;  // big jump velocity (lands on car roof)
+const TOTAL_CARS = 5;
+
+// ===== STATE =====
+const S = { TITLE:0, READY:1, JUMPING:2, RIDING:3, MISSED:4, RESULT:5 };
+let state = S.TITLE;
+let score = 0, hiScore = 0;
+let carIndex = 0;
+
+// ===== UNICORN =====
+let ux, uy, uvy;
+function resetUnicorn() {
+  ux = TRAM_X();
+  uy = TRAM_TOP();
+  uvy = AUTO_VY;
+}
+
+// ===== CAR =====
+let car = null;
+let ridingTimer = 0, missedTimer = 0;
+const CAR_EMOJIS  = ['🚗','🚕','🚙','🏎️','🚌','🚐'];
+const CAR_COLORS  = ['#ef5350','#ff7043','#42a5f5','#66bb6a','#ab47bc','#ffa726'];
+const CAR_WIDTHS  = [90, 85, 88, 80, 110, 95];
+
+function carSpeed() {
+  if (carIndex < 2) return 2.8;
+  if (carIndex < 4) return 3.5;
+  return 4.2;
+}
+function spawnCar() {
+  const idx = carIndex % CAR_EMOJIS.length;
+  const cw  = CAR_WIDTHS[idx];
+  car = {
+    x: W() + cw + 20,
+    y: CAR_TOP(),
+    w: cw,
+    h: CAR_H(),
+    speed: carSpeed(),
+    color: CAR_COLORS[carIndex % CAR_COLORS.length],
+    emoji: CAR_EMOJIS[idx],
+  };
+}
+
+// ===== CLOUDS =====
+let clouds = [];
+function initClouds() {
+  clouds = [];
+  for (let i=0; i<5; i++) {
+    clouds.push({
+      x: Math.random()*W(), y: H()*(0.04 + Math.random()*0.22),
+      size: 40+Math.random()*55, speed: 0.25+Math.random()*0.4,
+    });
+  }
+}
+
+// ===== SPARKLE TRAIL =====
+let trail = [];
+let glowTimer = 0;
+
+// ===== PARTICLES =====
+let particles = [], floats = [];
+function spawnBurst(x, y, emojis, n=12) {
+  for (let i=0; i<n; i++) {
+    const a = Math.random()*Math.PI*2, spd = 2+Math.random()*5;
+    particles.push({
+      x, y, vx:Math.cos(a)*spd, vy:Math.sin(a)*spd-1,
+      emoji: emojis[Math.floor(Math.random()*emojis.length)],
+      life:50, maxLife:50, size:18+Math.random()*14,
+    });
+  }
+}
+function floatText(txt, x, y, color='white') {
+  floats.push({ txt, x, y, life:80, maxLife:80, color });
+}
+
+// ===== AUDIO =====
+let aCtx=null;
+function getA() { if(!aCtx) aCtx=new(window.AudioContext||window.webkitAudioContext)(); return aCtx; }
+function sfxBounce() {
+  try {
+    const a=getA(), o=a.createOscillator(), g=a.createGain();
+    o.connect(g); g.connect(a.destination); o.type='sine';
+    o.frequency.setValueAtTime(420,a.currentTime);
+    o.frequency.exponentialRampToValueAtTime(660,a.currentTime+.1);
+    g.gain.setValueAtTime(.12,a.currentTime); g.gain.exponentialRampToValueAtTime(.001,a.currentTime+.15);
+    o.start(); o.stop(a.currentTime+.15);
+  } catch(e){}
+}
+function sfxJump() {
+  try {
+    const a=getA(), o=a.createOscillator(), g=a.createGain();
+    o.connect(g); g.connect(a.destination); o.type='sine';
+    o.frequency.setValueAtTime(500,a.currentTime);
+    o.frequency.exponentialRampToValueAtTime(1000,a.currentTime+.3);
+    g.gain.setValueAtTime(.15,a.currentTime); g.gain.exponentialRampToValueAtTime(.001,a.currentTime+.3);
+    o.start(); o.stop(a.currentTime+.3);
+  } catch(e){}
+}
+function sfxLand() {
+  try {
+    const a=getA();
+    [523,659,784,1047].forEach((f,i)=>{
+      const o=a.createOscillator(), g=a.createGain();
+      o.connect(g); g.connect(a.destination); o.type='sine'; o.frequency.value=f;
+      const t=a.currentTime+i*.1;
+      g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.25,t+.04);
+      g.gain.exponentialRampToValueAtTime(.001,t+.45);
+      o.start(t); o.stop(t+.45);
+    });
+  } catch(e){}
+}
+function sfxMiss() {
+  try {
+    const a=getA(), o=a.createOscillator(), g=a.createGain();
+    o.connect(g); g.connect(a.destination); o.type='sawtooth';
+    o.frequency.setValueAtTime(260,a.currentTime);
+    o.frequency.exponentialRampToValueAtTime(100,a.currentTime+.3);
+    g.gain.setValueAtTime(.1,a.currentTime); g.gain.exponentialRampToValueAtTime(.001,a.currentTime+.3);
+    o.start(); o.stop(a.currentTime+.3);
+  } catch(e){}
+}
+
+// ===== GAME LOGIC =====
+function startGame() {
+  getA();
+  carIndex = 0; score = 0;
+  resetUnicorn(); initClouds();
+  particles=[]; floats=[]; trail=[];
+  spawnCar();
+  jumpBtn.disabled = false;
+  state = S.READY;
+}
+
+function doJump() {
+  if (state===S.TITLE || state===S.RESULT) { startGame(); return; }
+  if (state!==S.READY) return;
+  state = S.JUMPING;
+  uvy = BIG_VY;
+  sfxJump();
+  jumpBtn.disabled = true;
+}
+
+function nextCar() {
+  carIndex++;
+  if (carIndex >= TOTAL_CARS) {
+    if (score>hiScore) hiScore=score;
+    state=S.RESULT;
+    spawnBurst(W()/2, H()/2, ['🎉','⭐','🌟','🌈','🦄'], 20);
+  } else {
+    resetUnicorn();
+    spawnCar();
+    state=S.READY;
+    jumpBtn.disabled=false;
+  }
+}
+
+function onLand() {
+  if (state!==S.JUMPING) return;
+  state = S.RIDING;
+  score++;
+  ridingTimer = 100;
+  sfxLand();
+  spawnBurst(ux, uy, ['🎉','⭐','🌟','🌈','✨','💖','🌸'], 18);
+  floatText('のった！🎉', W()*0.5, H()*0.3, '#ffd54f');
+}
+
+function onMiss() {
+  if (state===S.MISSED || state===S.RIDING) return;
+  state = S.MISSED;
+  missedTimer = 60;
+  sfxMiss();
+  floatText('ざんねん！💨', W()*0.5, H()*0.32, 'rgba(255,255,255,.9)');
+}
+
+// ===== UPDATE =====
+let lastT=0;
+function update(ts) {
+  const dt = Math.min((ts-lastT)/16, 3);
+  lastT = ts;
+
+  // Clouds
+  clouds.forEach(c => {
+    c.x -= c.speed*dt;
+    if (c.x < -c.size*3) c.x = W()+c.size;
+  });
+
+  // Particles
+  particles.forEach(p => { p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=0.2*dt; p.life-=dt; });
+  particles = particles.filter(p=>p.life>0);
+  floats.forEach(f => { f.y -= 1.5*dt; f.life-=dt; });
+  floats = floats.filter(f=>f.life>0);
+  trail.forEach(t => t.life-=dt);
+  trail = trail.filter(t=>t.life>0);
+
+  // Car movement
+  if (car && state!==S.RIDING) {
+    car.x -= car.speed*dt;
+  }
+  if (car && state===S.RIDING) {
+    car.x -= car.speed*0.5*dt;  // slow down when riding
+    ux = car.x + car.w/2;        // unicorn rides on car
+    uy = car.y - H()*0.04;
+  }
+
+  // Glow indicator: car approaching sweet spot
+  if (car && state===S.READY) {
+    const tx = TRAM_X();
+    // sweet spot: car will arrive at tram x by the time unicorn peaks
+    const t_jump = Math.abs(BIG_VY)/GRAVITY;     // frames to peak
+    const expected_car_x = tx - car.speed * t_jump * 2; // where car should be now
+    if (car.x >= expected_car_x - car.w && car.x <= expected_car_x + car.w*2) {
+      glowTimer = 12;
+    }
+  }
+  if (glowTimer>0) glowTimer-=dt;
+
+  // Car missed check
+  if (car && car.x + car.w < -20 && state===S.READY) {
+    onMiss();
+  }
+
+  // --- READY: auto-bounce ---
+  if (state===S.READY) {
+    uy += uvy*dt; uvy += GRAVITY*dt;
+    if (uy >= TRAM_TOP()) {
+      uy = TRAM_TOP(); uvy = AUTO_VY;
+      sfxBounce();
+      trail.push({x:ux, y:uy, life:18});
+    }
+  }
+
+  // --- JUMPING ---
+  if (state===S.JUMPING) {
+    uy += uvy*dt; uvy += GRAVITY*dt;
+    trail.push({x:ux, y:uy, life:22});
+    // Landing check: descending AND at car roof height AND car under tram x
+    if (uvy >= 0 && car && uy >= car.y - 10 && uy <= car.y + car.h*0.4) {
+      if (ux >= car.x - 20 && ux <= car.x + car.w + 20) {
+        onLand();
+      }
+    }
+    // Missed: came back down to trampoline without landing
+    if (uy >= TRAM_TOP()) {
+      uy = TRAM_TOP(); uvy = AUTO_VY;
+      if (state===S.JUMPING) onMiss();
+    }
+    // Car passed while in air
+    if (car && car.x + car.w < TRAM_X() - car.w*2 && state===S.JUMPING) {
+      onMiss();
+    }
+  }
+
+  // --- RIDING ---
+  if (state===S.RIDING) {
+    ridingTimer-=dt;
+    if (ridingTimer<=0 || (car && car.x+car.w < -20)) {
+      // bounce back off car
+      uy = car.y - H()*0.04;
+      uvy = AUTO_VY*1.2;
+      state = S.MISSED; // reuse missed state to return to trampoline
+      missedTimer = 50;
+    }
+  }
+
+  // --- MISSED ---
+  if (state===S.MISSED) {
+    missedTimer-=dt;
+    // Drift unicorn back to trampoline
+    uy += uvy*dt; uvy += GRAVITY*dt;
+    ux += (TRAM_X()-ux)*0.06*dt; // drift x toward tram
+    if (uy >= TRAM_TOP()) {
+      uy = TRAM_TOP(); uvy = AUTO_VY;
+      ux = TRAM_X();
+    }
+    if (missedTimer<=0) nextCar();
+  }
+}
+
+// ===== DRAW =====
+function draw() {
+  // Sky gradient
+  const sky = ctx.createLinearGradient(0,0,0,H());
+  sky.addColorStop(0,   '#5c85d6');
+  sky.addColorStop(0.5, '#87CEEB');
+  sky.addColorStop(0.65,'#b3e5fc');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,W(),H());
+
+  drawClouds();
+  drawBackground();
+  drawTrampoline();
+  drawSparkleTrail();
+  if (car && state!==S.RESULT) drawCar();
+  if (state!==S.TITLE && state!==S.RESULT) drawUnicorn();
+  drawParticles();
+  drawFloats();
+  drawHUD();
+
+  if (state===S.TITLE)  drawTitleOverlay();
+  if (state===S.RESULT) drawResultOverlay();
+}
+
+function drawClouds() {
+  ctx.fillStyle='rgba(255,255,255,.88)';
+  clouds.forEach(c => {
+    ctx.beginPath();
+    ctx.arc(c.x,         c.y,          c.size*.5,  0, Math.PI*2);
+    ctx.arc(c.x+c.size*.38, c.y-c.size*.1, c.size*.4, 0, Math.PI*2);
+    ctx.arc(c.x+c.size*.72, c.y,          c.size*.44, 0, Math.PI*2);
+    ctx.fill();
+  });
+}
+
+function drawBackground() {
+  const gy = GROUND_Y();
+  // Hills
+  ctx.fillStyle='#66bb6a';
+  ctx.beginPath(); ctx.arc(W()*.7, gy, H()*.28, Math.PI, 0); ctx.fill();
+  ctx.fillStyle='#81c784';
+  ctx.beginPath(); ctx.arc(W()*.3, gy, H()*.22, Math.PI, 0); ctx.fill();
+  // Ground
+  ctx.fillStyle='#558b2f';
+  ctx.fillRect(0, gy, W(), H()-gy);
+  ctx.fillStyle='#33691e';
+  ctx.fillRect(0, gy+H()*.06, W(), H()-gy-H()*.06);
+  // Road stripe
+  ctx.fillStyle='#455a64';
+  ctx.fillRect(0, gy-4, W(), H()*.09);
+  ctx.fillStyle='rgba(255,255,180,.3)';
+  for (let x=0; x<W(); x+=46) ctx.fillRect(x, gy+H()*.035, 28, 3);
+  ctx.fillStyle='rgba(255,255,200,.4)';
+  ctx.fillRect(0, gy-3, W(), 3);
+  ctx.fillRect(0, gy+H()*.085, W(), 3);
+}
+
+function drawTrampoline() {
+  const tx = TRAM_X();
+  const ty = TRAM_TOP();
+  const tw = W()*0.13;
+  const th = H()*0.032;
+
+  // Glow
+  if (glowTimer>0) {
+    ctx.shadowColor='#ffd54f';
+    ctx.shadowBlur=22*(glowTimer/12);
+  }
+
+  // Legs
+  ctx.fillStyle='#8d6e63';
+  ctx.fillRect(tx-tw/2-3, ty+th/2, 10, H()*0.08);
+  ctx.fillRect(tx+tw/2-7, ty+th/2, 10, H()*0.08);
+  // Springs
+  ctx.strokeStyle='#bdbdbd'; ctx.lineWidth=2;
+  [[tx-tw/2+5],[tx+tw/2-5]].forEach(([lx]) => {
+    for (let i=0;i<3;i++) {
+      const ly=ty+th/2+i*(H()*.08/3);
+      ctx.beginPath();
+      ctx.moveTo(lx-4,ly); ctx.lineTo(lx+4,ly+H()*.026); ctx.stroke();
+    }
+  });
+  // Mat
+  const mg=ctx.createLinearGradient(tx-tw/2,ty,tx+tw/2,ty+th);
+  mg.addColorStop(0,'#e91e63'); mg.addColorStop(.5,'#ff80ab'); mg.addColorStop(1,'#c62828');
+  ctx.fillStyle=mg;
+  ctx.beginPath(); ctx.roundRect(tx-tw/2, ty-th/2, tw, th, 6); ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.moveTo(tx-tw/4,ty-th/2); ctx.lineTo(tx-tw/4,ty+th/2);
+  ctx.moveTo(tx+tw/4,ty-th/2); ctx.lineTo(tx+tw/4,ty+th/2);
+  ctx.stroke();
+  ctx.shadowBlur=0;
+
+  // Hint text
+  if (glowTimer>0 && state===S.READY) {
+    ctx.fillStyle=`rgba(255,215,0,${Math.min(1,glowTimer/8)})`;
+    ctx.font=`bold ${Math.min(20,W()*.05)}px sans-serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('👆 いまだ！', tx, ty-H()*.1);
+  }
+}
+
+function drawSparkleTrail() {
+  const rc=['#ff6ec7','#ffd54f','#69f0ae','#40c4ff','#ea80fc'];
+  trail.forEach((t,i) => {
+    ctx.globalAlpha=(t.life/22)*0.65;
+    ctx.fillStyle=rc[i%rc.length];
+    const r=5*(t.life/22);
+    ctx.beginPath(); ctx.arc(t.x, t.y, r, 0, Math.PI*2); ctx.fill();
+  });
+  ctx.globalAlpha=1;
+}
+
+function drawCar() {
+  const c=car;
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,.22)';
+  ctx.beginPath();
+  ctx.ellipse(c.x+c.w/2, GROUND_Y()+4, c.w*.45, 6, 0, 0, Math.PI*2); ctx.fill();
+  // Glow
+  ctx.shadowColor=c.color; ctx.shadowBlur=10;
+  ctx.fillStyle=c.color;
+  ctx.beginPath(); ctx.roundRect(c.x, c.y, c.w, c.h, 10); ctx.fill();
+  // Windshield
+  ctx.fillStyle='rgba(255,255,255,.3)';
+  ctx.beginPath(); ctx.roundRect(c.x+c.w*.55, c.y+c.h*.12, c.w*.3, c.h*.35, 4); ctx.fill();
+  ctx.shadowBlur=0;
+  // Wheels
+  ctx.fillStyle='#212121';
+  [c.x+c.w*.18, c.x+c.w*.78].forEach(wx => {
+    ctx.beginPath(); ctx.arc(wx, c.y+c.h, c.h*.22, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='#616161';
+    ctx.beginPath(); ctx.arc(wx, c.y+c.h, c.h*.1, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='#212121';
+  });
+  // Emoji
+  ctx.font=`${c.h*.7}px serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(c.emoji, c.x+c.w/2, c.y+c.h*.4);
+}
+
+function drawUnicorn() {
+  const sz = Math.min(H()*0.1, 56);
+  ctx.font=`${sz}px serif`;
+  ctx.textAlign='center'; ctx.textBaseline='bottom';
+  ctx.fillText('🦄', ux, uy);
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    ctx.globalAlpha=p.life/p.maxLife;
+    ctx.font=`${p.size}px serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(p.emoji, p.x, p.y);
+  });
+  ctx.globalAlpha=1;
+}
+function drawFloats() {
+  floats.forEach(f => {
+    ctx.globalAlpha=Math.min(1,f.life/f.maxLife*2);
+    ctx.strokeStyle='rgba(0,0,0,.5)'; ctx.lineWidth=4;
+    ctx.fillStyle=f.color;
+    ctx.font=`bold ${Math.min(30,W()*.075)}px sans-serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.strokeText(f.txt,f.x,f.y); ctx.fillText(f.txt,f.x,f.y);
+  });
+  ctx.globalAlpha=1;
+}
+
+function drawHUD() {
+  const sh=34;
+  ctx.fillStyle='rgba(0,0,0,.48)';
+  ctx.beginPath(); ctx.roundRect(8,6,126,sh,10); ctx.fill();
+  ctx.fillStyle='white'; ctx.font='bold 15px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  const cn=Math.min(carIndex+1,TOTAL_CARS);
+  ctx.fillText(`🚗 ${cn} / ${TOTAL_CARS}だいめ`, 71, 6+sh/2);
+
+  ctx.fillStyle='rgba(0,0,0,.48)';
+  ctx.beginPath(); ctx.roundRect(W()-110,6,102,sh,10); ctx.fill();
+  ctx.fillStyle='#ffd54f'; ctx.font='bold 16px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(`⭐ ${score} / ${TOTAL_CARS}`, W()-59, 6+sh/2);
+}
+
+function btnPanel(cx, cy, w, h, text, textColor='#5d4037') {
+  const gr=ctx.createLinearGradient(cx-w/2,cy-h/2,cx-w/2,cy+h/2);
+  gr.addColorStop(0,'#ffd54f'); gr.addColorStop(1,'#ffb300');
+  ctx.fillStyle=gr;
+  ctx.beginPath(); ctx.roundRect(cx-w/2,cy-h/2,w,h,h/2); ctx.fill();
+  ctx.fillStyle=textColor;
+  ctx.font=`bold ${Math.min(22,W()*.055)}px sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(text, cx, cy);
+}
+
+function drawTitleOverlay() {
+  ctx.fillStyle='rgba(0,0,0,.58)'; ctx.fillRect(0,0,W(),H());
+  const cx=W()/2, h=H();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font=`${Math.min(74,W()*.18)}px serif`;
+  ctx.fillText('🦄', cx, h*.22);
+  ctx.fillStyle='white';
+  ctx.font=`bold ${Math.min(30,W()*.075)}px sans-serif`;
+  ctx.fillText('トランポリンジャンプ', cx, h*.4);
+  ctx.fillStyle='rgba(255,255,255,.78)';
+  ctx.font=`${Math.min(16,W()*.04)}px sans-serif`;
+  ctx.fillText('くるまが きたら…', cx, h*.5);
+  ctx.fillText('タイミングよく ジャンプ！ボタンをおしてね 🎵', cx, h*.57);
+  btnPanel(cx, h*.7, 190, 56, 'はじめる！');
+}
+
+function drawResultOverlay() {
+  ctx.fillStyle='rgba(0,0,0,.68)'; ctx.fillRect(0,0,W(),H());
+  const cx=W()/2, h=H();
+  const pct=score/TOTAL_CARS;
+  let emoji, msg;
+  if      (pct===1)   { emoji='🏆'; msg='かんぺき！ぜんぶのった！！'; }
+  else if (pct>=.6)   { emoji='🎉'; msg='すごい！よくのれたね！'; }
+  else if (pct>=.4)   { emoji='⭐'; msg='もうちょっと！がんばれ！'; }
+  else                { emoji='🦄'; msg='またちょうせんしよう！'; }
+
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font=`${Math.min(64,W()*.16)}px serif`;
+  ctx.fillText(emoji, cx, h*.24);
+  ctx.fillStyle='white';
+  ctx.font=`bold ${Math.min(26,W()*.065)}px sans-serif`;
+  ctx.fillText(`${TOTAL_CARS}だいのくるまがきたよ！`, cx, h*.4);
+  ctx.fillStyle='#ffd54f';
+  ctx.font=`bold ${Math.min(34,W()*.085)}px sans-serif`;
+  ctx.fillText(`${score} / ${TOTAL_CARS} だい のった！`, cx, h*.52);
+  if (score>0 && score>=hiScore) {
+    ctx.fillStyle='#ff80ab';
+    ctx.font=`bold ${Math.min(18,W()*.045)}px sans-serif`;
+    ctx.fillText('🏆 さいこうきろく！', cx, h*.62);
+  }
+  ctx.fillStyle='rgba(255,255,255,.88)';
+  ctx.font=`${Math.min(20,W()*.05)}px sans-serif`;
+  ctx.fillText(msg, cx, h*.7);
+  btnPanel(cx, h*.81, 190, 54, 'もう一かい！');
+}
+
+// ===== INPUT =====
+function tryJump() { getA(); doJump(); }
+jumpBtn.addEventListener('touchstart', e=>{ e.preventDefault(); tryJump(); }, {passive:false});
+jumpBtn.addEventListener('click', tryJump);
+canvas.addEventListener('click', ()=>{ if(state===S.TITLE||state===S.RESULT) startGame(); });
+document.addEventListener('keydown', e=>{
+  if (e.key===' '||e.key==='ArrowUp') { e.preventDefault(); tryJump(); }
+});
+
+// ===== LOOP =====
+function loop(ts) { update(ts); draw(); requestAnimationFrame(loop); }
+initClouds();
+resetUnicorn();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -362,6 +362,16 @@ const GAMES = [
     thumbnail: 'egg',
   },
   {
+    id: 'trampoline-jump',
+    title: '🎪 トランポリンジャンプ',
+    desc: 'トランポリンで ジャンプして くるまの うえに のろう！タイミングが だいじだよ！',
+    url: 'trampoline_jump.html',
+    tags: ['タイミング', '3さい〜'],
+    badge: 'NEW!',
+    badgeClass: 'badge-new',
+    thumbnail: 'trampoline',
+  },
+  {
     id: 'unicorn-road',
     title: '🚗 ユニコーンロード',
     desc: 'ユニコーンを うごかして くるまを よけよう！ゴールに たどりつけるかな？',
@@ -1136,6 +1146,63 @@ function drawRoadThumb(ctx, w, h) {
   drawStarT(ctx, w*.08, h*.06, 5, '#fff9c4');
 }
 
+function drawTrampolineThumb(ctx, w, h) {
+  // Sky
+  const sky = ctx.createLinearGradient(0,0,0,h);
+  sky.addColorStop(0,'#5c85d6'); sky.addColorStop(.6,'#87CEEB'); sky.addColorStop(.65,'#b3e5fc');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,w,h);
+  // Clouds
+  ctx.fillStyle='rgba(255,255,255,.85)';
+  [[.2,.12,28],[.6,.08,22],[.82,.16,18]].forEach(([cx,cy,s])=>{
+    ctx.beginPath();
+    ctx.arc(w*cx,h*cy,s,0,Math.PI*2);
+    ctx.arc(w*cx+s*.8,h*cy-s*.1,s*.75,0,Math.PI*2);
+    ctx.arc(w*cx+s*1.5,h*cy,s*.8,0,Math.PI*2);
+    ctx.fill();
+  });
+  // Hills
+  ctx.fillStyle='#66bb6a';
+  ctx.beginPath(); ctx.arc(w*.7,h*.65,h*.3,Math.PI,0); ctx.fill();
+  ctx.fillStyle='#81c784';
+  ctx.beginPath(); ctx.arc(w*.25,h*.65,h*.22,Math.PI,0); ctx.fill();
+  // Ground + road
+  ctx.fillStyle='#558b2f'; ctx.fillRect(0,h*.65,w,h*.35);
+  ctx.fillStyle='#455a64'; ctx.fillRect(0,h*.63,w,h*.09);
+  ctx.fillStyle='rgba(255,255,180,.3)';
+  for (let x=0;x<w;x+=36) ctx.fillRect(x,h*.675,22,2.5);
+  // Car
+  ctx.fillStyle='#ef5350';
+  ctx.beginPath(); ctx.roundRect(w*.45,h*.59,w*.28,h*.1,8); ctx.fill();
+  ctx.font=`${h*.09}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🚗',w*.59,h*.64);
+  // Wheels
+  ctx.fillStyle='#212121';
+  [w*.52,w*.66].forEach(wx=>{
+    ctx.beginPath(); ctx.arc(wx,h*.69,h*.03,0,Math.PI*2); ctx.fill();
+  });
+  // Trampoline
+  ctx.fillStyle='#8d6e63';
+  ctx.fillRect(w*.13,h*.64,8,h*.1);
+  ctx.fillRect(w*.24,h*.64,8,h*.1);
+  const mg=ctx.createLinearGradient(w*.12,h*.62,w*.26,h*.65);
+  mg.addColorStop(0,'#e91e63'); mg.addColorStop(.5,'#ff80ab'); mg.addColorStop(1,'#c62828');
+  ctx.fillStyle=mg;
+  ctx.beginPath(); ctx.roundRect(w*.11,h*.6,w*.17,h*.04,4); ctx.fill();
+  // Unicorn in air (arc)
+  ctx.font=`${h*.13}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🦄',w*.33,h*.32);
+  // Sparkle trail
+  const rc=['#ff6ec7','#ffd54f','#69f0ae','#40c4ff'];
+  [[.28,.42],[.31,.38],[.32,.35]].forEach(([tx,ty],i)=>{
+    ctx.fillStyle=rc[i%rc.length]; ctx.globalAlpha=0.7-i*.15;
+    ctx.beginPath(); ctx.arc(w*tx,h*ty,4,0,Math.PI*2); ctx.fill();
+  });
+  ctx.globalAlpha=1;
+  // Stars
+  drawStarT(ctx,w*.82,h*.12,7,'#ffd54f');
+  drawStarT(ctx,w*.06,h*.08,5,'#fff9c4');
+}
+
 const thumbDrawers = {
   unicorn: drawUnicornThumb,
   coloring: drawColoringThumb,
@@ -1145,6 +1212,7 @@ const thumbDrawers = {
   adventure: drawAdventureThumb,
   egg: drawEggThumb,
   road: drawRoadThumb,
+  trampoline: drawTrampolineThumb,
 };
 
 GAMES.forEach(game => {
