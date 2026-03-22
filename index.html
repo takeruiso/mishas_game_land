@@ -392,6 +392,16 @@ const GAMES = [
     thumbnail: 'numbers',
   },
   {
+    id: 'unicorn-race',
+    title: '🏁 ユニコーンレース',
+    desc: 'ミニカーにのった ユニコーンで レース！⬅️➡️ボタンで かじをきって 1いを めざそう！3ラップ がんばれ！',
+    url: 'unicorn_race.html',
+    tags: ['レース', '3さい〜'],
+    badge: 'NEW!',
+    badgeClass: 'badge-new',
+    thumbnail: 'race',
+  },
+  {
     id: 'parking-shop',
     title: '🛒 ユニコーンのおかいもの',
     desc: 'くるまにのった ユニコーンを うごかして こうていで おかいもの！ かいものリストを ぜんぶ かえたら クリア！',
@@ -1213,6 +1223,85 @@ function drawTrampolineThumb(ctx, w, h) {
   drawStarT(ctx,w*.06,h*.08,5,'#fff9c4');
 }
 
+function drawRaceThumb(ctx, w, h) {
+  // Sky
+  const sky = ctx.createLinearGradient(0,0,0,h);
+  sky.addColorStop(0,'#87ceeb'); sky.addColorStop(1,'#e1f5fe');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,w,h);
+
+  // Grass sides
+  ctx.fillStyle='#66bb6a';
+  ctx.fillRect(0,0,w*.18,h); ctx.fillRect(w*.82,0,w*.18,h);
+
+  // Road
+  const rg=ctx.createLinearGradient(w*.18,0,w*.82,0);
+  rg.addColorStop(0,'#546e7a'); rg.addColorStop(.5,'#78909c'); rg.addColorStop(1,'#546e7a');
+  ctx.fillStyle=rg; ctx.fillRect(w*.18,0,w*.64,h);
+
+  // Edge lines
+  ctx.fillStyle='#ffee58'; ctx.fillRect(w*.18,0,5,h); ctx.fillRect(w*.82-5,0,5,h);
+  ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.fillRect(w*.18+5,0,4,h); ctx.fillRect(w*.82-9,0,4,h);
+
+  // Center dashes
+  ctx.strokeStyle='rgba(255,255,200,0.4)'; ctx.lineWidth=3;
+  ctx.setLineDash([24,18]);
+  ctx.beginPath(); ctx.moveTo(w*.5,0); ctx.lineTo(w*.5,h); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Decorations
+  ctx.font=`${w*.07}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ['🌸','🌳','🌼'].forEach((e,i)=>{ ctx.fillText(e,w*.08,h*(.2+i*.3)); });
+  ['🌺','🌲','🌻'].forEach((e,i)=>{ ctx.fillText(e,w*.92,h*(.25+i*.3)); });
+
+  // Stars on road
+  ctx.font=`${w*.07}px serif`;
+  [[.35,.25],[.62,.45],[.42,.65]].forEach(([sx,sy])=>ctx.fillText('⭐',w*sx,h*sy));
+
+  // Opponent cars (simple)
+  const cars=[
+    {x:.35,y:.28,c:'#ff80ab',e:'🐰'},
+    {x:.58,y:.45,c:'#81c784',e:'🐸'},
+  ];
+  cars.forEach(c=>{
+    ctx.fillStyle=c.c;
+    ctx.beginPath(); ctx.roundRect(w*c.x-14,h*c.y-20,28,36,6); ctx.fill();
+    ctx.font=`${w*.065}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(c.e,w*c.x,h*c.y);
+  });
+
+  // Player car (bigger, pink, with crown)
+  ctx.fillStyle='#e91e8c';
+  ctx.beginPath(); ctx.roundRect(w*.5-16,h*.72-22,32,42,8); ctx.fill();
+  ctx.fillStyle='#ad1457';
+  ctx.beginPath(); ctx.roundRect(w*.5-12,h*.72-18,24,20,[7,7,0,0]); ctx.fill();
+  ctx.fillStyle='rgba(200,235,255,0.7)';
+  ctx.beginPath(); ctx.roundRect(w*.5-10,h*.72-16,20,10,4); ctx.fill();
+  ctx.font=`${w*.1}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🦄',w*.5,h*.72-2);
+  ctx.font=`${w*.06}px serif`; ctx.fillText('👑',w*.5+14,h*.72-22);
+
+  // Finish banner hint
+  ctx.fillStyle='rgba(0,0,0,0.3)';
+  ctx.fillRect(w*.18,h*.04,w*.64,h*.06);
+  ctx.fillStyle='#fff';
+  ctx.font=`bold ${w*.05}px "Hiragino Sans",sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🏁 スタート！', w*.5, h*.07);
+
+  // Speed lines behind player
+  ['#ff6ec7','#ffd54f','#69f0ae'].forEach((c,i)=>{
+    ctx.strokeStyle=c; ctx.globalAlpha=0.4-i*.1; ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(w*.5-8-i*4,h*.75+i*3); ctx.lineTo(w*.5-8-i*4,h*.9+i*4);
+    ctx.moveTo(w*.5+8+i*4,h*.75+i*3); ctx.lineTo(w*.5+8+i*4,h*.9+i*4);
+    ctx.stroke();
+  });
+  ctx.globalAlpha=1;
+
+  drawStarT(ctx,w*.1,h*.06,7,'#ffd54f');
+  drawStarT(ctx,w*.9,h*.08,5,'#fff9c4');
+}
+
 function drawParkingThumb(ctx, w, h) {
   // Asphalt background
   const bg = ctx.createLinearGradient(0, 0, w, h);
@@ -1306,6 +1395,7 @@ const thumbDrawers = {
   road: drawRoadThumb,
   trampoline: drawTrampolineThumb,
   parking: drawParkingThumb,
+  race: drawRaceThumb,
 };
 
 GAMES.forEach(game => {
