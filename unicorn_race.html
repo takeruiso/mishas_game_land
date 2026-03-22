@@ -83,11 +83,13 @@ document.addEventListener('keyup', e => {
 });
 
 // ---- Constants ----
-const TOTAL_LAPS   = 3;
-const LAP_DIST     = 4000;    // distance units per lap
-const PLAYER_SPEED = 5.0;     // player base scroll speed (px/frame)
-const VIEW_SCALE   = 0.55;    // distance units → screen pixels offset
-const ROAD_W_FRAC  = 0.72;    // road width as fraction of canvas width (capped)
+const TOTAL_LAPS         = 3;
+const LAP_DIST           = 4000;   // distance units per lap
+const PLAYER_SPEED_BASE  = 3.2;    // initial player speed (slower than NPCs)
+const SPEED_BOOST_PER_STAR = 0.32; // speed added per star collected
+const SPEED_BOOST_MAX    = 3.2;    // max total boost (player max speed = 6.4)
+const VIEW_SCALE         = 0.55;   // distance units → screen pixels offset
+const ROAD_W_FRAC        = 0.72;   // road width as fraction of canvas width
 
 // ---- Pre-baked assets ----
 let roadGrd = null;
@@ -122,18 +124,17 @@ let playerFinished = false;
 
 // NPCs: dist tracks real distance, screenY derived from dist diff vs player
 const NPC_DEFS = [
-  { label: 'うさちゃん', color: '#ff80ab', bodyColor: '#f06292', startAhead: 350 },
-  { label: 'くまちゃん', color: '#ffb74d', bodyColor: '#ffa726', startAhead: 600 },
-  { label: 'かえるちゃん', color: '#81c784', bodyColor: '#4caf50', startAhead: 900 },
+  { label: 'うさちゃん',  color: '#ff80ab', bodyColor: '#f06292', startAhead: 200, speed: 4.8 },
+  { label: 'くまちゃん',  color: '#ffb74d', bodyColor: '#ffa726', startAhead: 400, speed: 5.1 },
+  { label: 'かえるちゃん', color: '#81c784', bodyColor: '#4caf50', startAhead: 600, speed: 5.4 },
 ];
 let npcs = [];
 
 function initNpcs() {
   npcs = NPC_DEFS.map((def, i) => ({
     ...def,
-    dist: def.startAhead,       // starts ahead of player
-    x: 0.3 + i * 0.2,          // lane position
-    speed: 2.8 + Math.random() * 0.4, // slower than player (player=5.0)
+    dist: def.startAhead,
+    x: 0.28 + i * 0.22,
     wobble: i * 1.1,
     lap: 0,
     finished: false,
@@ -189,14 +190,17 @@ let finishOrder = [];
 let playerRank  = 0;
 let finishT = 0;
 
-// ---- Score ----
+// ---- Score & speed ----
 let score = 0;
+let playerSpeedBoost = 0;
+let playerSpeed = PLAYER_SPEED_BASE;
 
 // ---- Init ----
 function init() {
   playerDist = 0; playerX = 0.5; playerVx = 0;
   playerLap = 0; playerFinished = false;
   score = 0; lapFlash = 0;
+  playerSpeedBoost = 0; playerSpeed = PLAYER_SPEED_BASE;
   gameState = 'playing'; finishOrder = []; playerRank = 0; finishT = 0;
   stars = []; decos = []; particles = [];
   roadOffset = 0;
@@ -214,7 +218,7 @@ function update() {
   const rw = getRoadW(), rx = getRoadX();
   const roadHalf = 0.5;
 
-  roadOffset += PLAYER_SPEED;
+  roadOffset += playerSpeed;
 
   // Player
   const steer = 0.009;
@@ -228,7 +232,7 @@ function update() {
   if (playerX < minX) { playerX = minX; playerVx =  Math.abs(playerVx) * 0.3; }
   if (playerX > maxX) { playerX = maxX; playerVx = -Math.abs(playerVx) * 0.3; }
 
-  playerDist += PLAYER_SPEED;
+  playerDist += playerSpeed;
 
   // Lap check
   const lapTarget = LAP_DIST * (playerLap + 1);
@@ -278,6 +282,9 @@ function update() {
       s.collected = true;
       score += 10;
       spawnCollect(s.x, sy);
+      // Speed boost
+      playerSpeedBoost = Math.min(playerSpeedBoost + SPEED_BOOST_PER_STAR, SPEED_BOOST_MAX);
+      playerSpeed = PLAYER_SPEED_BASE + playerSpeedBoost;
     }
   }
   while (stars.length < MAX_STARS) spawnStar();
@@ -368,6 +375,75 @@ function drawRoad() {
       ctx.fillRect(rx + rw/2 + lo - 2, y, 4, dashH);
     }
   });
+}
+
+// ---- Draw Finish Lines ----
+function drawFinishLines() {
+  const H = canvas.height;
+  const rw = getRoadW(), rx = getRoadX();
+
+  for (let lap = 1; lap <= TOTAL_LAPS; lap++) {
+    const worldDist = LAP_DIST * lap;
+    const sy = worldToScreenY(worldDist, H);
+    if (sy < -60 || sy > H + 60) continue;
+
+    const isLastLap = (lap === TOTAL_LAPS);
+    const poleH = 70;
+    const bannerH = 22;
+
+    // Road checkered stripe (2 rows)
+    const sqW = Math.floor(rw / 12);
+    for (let row = 0; row < 2; row++) {
+      for (let col = 0; col < 12; col++) {
+        ctx.fillStyle = (col + row) % 2 === 0 ? '#fff' : '#111';
+        ctx.fillRect(rx + col * sqW, sy - bannerH/2 + row * (bannerH/2), sqW, bannerH/2);
+      }
+    }
+
+    // Left pole
+    ctx.fillStyle = '#e53935';
+    ctx.fillRect(rx - 12, sy - poleH, 10, poleH + 12);
+    // Right pole
+    ctx.fillRect(rx + rw + 2, sy - poleH, 10, poleH + 12);
+
+    // Overhead banner connecting poles
+    const bannerY = sy - poleH;
+    ctx.fillStyle = isLastLap ? '#e53935' : '#1565c0';
+    ctx.fillRect(rx - 2, bannerY, rw + 4, 16);
+    // Banner checkers
+    const bsq = 16;
+    for (let col = 0; col < Math.floor((rw + 4) / bsq); col++) {
+      if (col % 2 === 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(rx - 2 + col * bsq, bannerY, bsq, 16);
+      }
+    }
+
+    // Banner text
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold 11px "Hiragino Sans", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const label = isLastLap ? 'GOAL!!' : `LAP ${lap}`;
+    ctx.fillText(label, rx + rw / 2, bannerY + 8);
+
+    // Flag on left pole tip
+    ctx.fillStyle = isLastLap ? '#ffd700' : '#fff';
+    ctx.beginPath();
+    ctx.moveTo(rx - 2,      bannerY);
+    ctx.lineTo(rx - 2 + 22, bannerY + 10);
+    ctx.lineTo(rx - 2,      bannerY + 20);
+    ctx.closePath();
+    ctx.fill();
+
+    // Glow when close (within 200 dist)
+    const distToLine = worldDist - playerDist;
+    if (distToLine > 0 && distToLine < 220) {
+      const alpha = (1 - distToLine / 220) * 0.5;
+      ctx.fillStyle = `rgba(255,220,0,${alpha})`;
+      ctx.fillRect(rx, sy - poleH, rw, poleH + 12);
+    }
+  }
 }
 
 // ---- Draw Decorations ----
@@ -557,6 +633,33 @@ function drawHUD() {
   ctx.textAlign = 'right'; ctx.fillStyle = '#ffd54f';
   ctx.fillText(`★ ${score}`, W/2+118, 31);
 
+  // Speed boost meter (bottom-left)
+  const meterW = 110, meterH = 18;
+  const meterX = 10, meterY = H - 60;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.beginPath(); ctx.roundRect(meterX, meterY, meterW + 50, meterH + 16, 10); ctx.fill();
+  ctx.font = 'bold 11px "Hiragino Sans", sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('スピード', meterX + 6, meterY + 12);
+  // Bar bg
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.beginPath(); ctx.roundRect(meterX + 54, meterY + 4, meterW, 10, 4); ctx.fill();
+  // Bar fill
+  const boostFrac = playerSpeedBoost / SPEED_BOOST_MAX;
+  const speedGrd = ctx.createLinearGradient(meterX+54, 0, meterX+54+meterW, 0);
+  speedGrd.addColorStop(0, '#42a5f5');
+  speedGrd.addColorStop(0.5, '#66bb6a');
+  speedGrd.addColorStop(1, '#ff6ec7');
+  ctx.fillStyle = speedGrd;
+  ctx.beginPath(); ctx.roundRect(meterX + 54, meterY + 4, meterW * boostFrac, 10, 4); ctx.fill();
+  // Flame icon when fast
+  if (boostFrac > 0.6) {
+    ctx.font = '14px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🔥', meterX + 54 + meterW + 12, meterY + 12);
+  }
+
   // Lap flash
   if (lapFlash > 0) {
     const alpha = Math.min(1, lapFlash) * Math.min(1, (2.5 - lapFlash) * 2);
@@ -673,6 +776,7 @@ function loop() {
   ctx.clearRect(0, 0, W, H);
 
   drawRoad();
+  drawFinishLines();
   drawDecorations();
   drawStars();
 
