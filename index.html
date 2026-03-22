@@ -391,6 +391,16 @@ const GAMES = [
     badgeClass: 'badge-new',
     thumbnail: 'numbers',
   },
+  {
+    id: 'parking-shop',
+    title: '🛒 ユニコーンのおかいもの',
+    desc: 'くるまにのった ユニコーンを うごかして こうていで おかいもの！ かいものリストを ぜんぶ かえたら クリア！',
+    url: 'parking_shop.html',
+    tags: ['ドライブ', '3さい〜'],
+    badge: 'NEW!',
+    badgeClass: 'badge-new',
+    thumbnail: 'parking',
+  },
 ];
 
 // ============ THUMBNAIL DRAWING ============
@@ -1203,6 +1213,88 @@ function drawTrampolineThumb(ctx, w, h) {
   drawStarT(ctx,w*.06,h*.08,5,'#fff9c4');
 }
 
+function drawParkingThumb(ctx, w, h) {
+  // Asphalt background
+  const bg = ctx.createLinearGradient(0, 0, w, h);
+  bg.addColorStop(0, '#424242');
+  bg.addColorStop(1, '#37474f');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+
+  // Parking lot area
+  ctx.fillStyle = '#4a4a5a';
+  ctx.fillRect(w*.1, h*.12, w*.8, h*.76);
+
+  // Parking lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1.5;
+  for (let x = w*.12; x < w*.88; x += w*.14) {
+    ctx.strokeRect(x, h*.18, w*.12, h*.22);
+    ctx.strokeRect(x, h*.55, w*.12, h*.22);
+  }
+
+  // Yellow border
+  ctx.strokeStyle = '#ffcc02';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(4, 4, w-8, h-8);
+
+  // Green corners
+  ctx.fillStyle = '#388e3c';
+  ctx.fillRect(0, 0, w*.09, h*.12);
+  ctx.fillRect(w*.91, 0, w*.09, h*.12);
+  ctx.fillRect(0, h*.88, w*.09, h*.12);
+  ctx.fillRect(w*.91, h*.88, w*.09, h*.12);
+
+  // Shops (simplified colored blocks with emoji)
+  const shops = [
+    { x:.2, y:.04, e:'🍎', c:'#ff7043' },
+    { x:.5, y:.04, e:'🧁', c:'#ec407a' },
+    { x:.8, y:.04, e:'🌸', c:'#ab47bc' },
+    { x:.93, y:.35, e:'🍦', c:'#42a5f5' },
+    { x:.93, y:.65, e:'🧸', c:'#66bb6a' },
+    { x:.5, y:.94, e:'📚', c:'#ffa726' },
+    { x:.2, y:.94, e:'🎀', c:'#f06292' },
+    { x:.07, y:.5, e:'🌈', c:'#26c6da' },
+  ];
+  shops.forEach(s => {
+    ctx.fillStyle = s.c;
+    ctx.beginPath();
+    ctx.roundRect(w*s.x - 16, h*s.y - 10, 32, 22, 5);
+    ctx.fill();
+    ctx.font = `${w*.065}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(s.e, w*s.x, h*s.y + 4);
+  });
+
+  // Unicorn car (pink, top-down)
+  const cx = w*.5, cy = h*.5;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(0.4);
+  ctx.fillStyle = '#f06292';
+  ctx.beginPath(); ctx.roundRect(-14, -22, 28, 44, 8); ctx.fill();
+  ctx.fillStyle = '#ad1457';
+  ctx.beginPath(); ctx.roundRect(-10, -18, 20, 36, 5); ctx.fill();
+  ctx.fillStyle = 'rgba(180,230,255,0.7)';
+  ctx.beginPath(); ctx.roundRect(-9, -17, 18, 10, 3); ctx.fill();
+  // Unicorn on top
+  ctx.font = `${w*.1}px serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('🦄', 0, 0);
+  ctx.restore();
+
+  // Shopping cart icon
+  ctx.font = `${w*.09}px serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('🛒', w*.82, h*.5);
+
+  // Stars
+  drawStarT(ctx, w*.07, h*.08, 7, '#ffd54f');
+  drawStarT(ctx, w*.93, h*.92, 6, '#fff9c4');
+  drawStarT(ctx, w*.5, h*.5, 4, '#fff');
+}
+
 const thumbDrawers = {
   unicorn: drawUnicornThumb,
   coloring: drawColoringThumb,
@@ -1213,6 +1305,7 @@ const thumbDrawers = {
   egg: drawEggThumb,
   road: drawRoadThumb,
   trampoline: drawTrampolineThumb,
+  parking: drawParkingThumb,
 };
 
 GAMES.forEach(game => {
