@@ -65,9 +65,26 @@ canvas { display: block; flex: 1; width: 100%; }
 }
 .action-btn:active { transform: scale(.85); background: rgba(255,220,0,.4); }
 .ctrl-side { display: flex; gap: 10px; }
+.home-btn {
+  position: fixed;
+  top: 10px; left: 10px;
+  z-index: 50;
+  padding: 7px 13px;
+  font-size: .82rem;
+  font-weight: 700;
+  color: #7b1fa2;
+  background: rgba(255,255,255,.88);
+  border: 2px solid #ce93d8;
+  border-radius: 22px;
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+.home-btn:active { transform: scale(.95); }
 </style>
 </head>
 <body>
+<a href="index.html" class="home-btn">🏰 もどる</a>
 <canvas id="c"></canvas>
 <div class="controls" id="controls">
   <div class="ctrl-side">
