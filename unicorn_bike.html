@@ -134,16 +134,27 @@ function setupBtn(id, onDown, onUp) {
   el.addEventListener('pointercancel', e => { onUp && onUp(); });
 }
 setupBtn('btnL', ()=>{
-  if (scene===SCENE.SHOP_MAC||scene===SCENE.SHOP_PIZZA) { selectedItem=Math.max(0,selectedItem-1); }
+  if (scene===SCENE.SHOP_MAC||scene===SCENE.SHOP_PIZZA) { closeShop(); }
   else btnLHeld=true;
 }, ()=>btnLHeld=false);
 setupBtn('btnR', ()=>{
   if (scene===SCENE.SHOP_MAC||scene===SCENE.SHOP_PIZZA) {
     const max=(scene===SCENE.SHOP_MAC?MAC_MENU:PIZZA_MENU).length-1;
-    selectedItem=Math.min(max,selectedItem+1);
+    selectedItem=(selectedItem+1)%(max+1);
   } else btnRHeld=true;
 }, ()=>btnRHeld=false);
 setupBtn('btnA', ()=>handleAction());
+
+// ---- update button labels based on scene ----
+function updateButtonLabels() {
+  const btnL = document.getElementById('btnL');
+  const btnR = document.getElementById('btnR');
+  const inShop = scene===SCENE.SHOP_MAC||scene===SCENE.SHOP_PIZZA;
+  btnL.textContent = inShop ? '🔙' : '⬅️';
+  btnL.title = inShop ? 'もどる' : '左';
+  btnR.textContent = inShop ? '👇' : '➡️';
+  btnR.title = inShop ? 'つぎ' : '右';
+}
 
 // ---- shop menu selection ----
 let selectedItem = 0;
@@ -797,7 +808,7 @@ function drawShopMenu(title, menu) {
 
   ctx.fillStyle='rgba(255,255,255,0.4)';
   ctx.font='13px sans-serif';
-  ctx.fillText('⬅️➡️ でえらぶ　「かう！」で購入', W/2, my+mh-72);
+  ctx.fillText('🔙もどる　👇つぎ　「かう！」で購入', W/2, my+mh-72);
 
   if (shopMsgTimer>0) {
     ctx.fillStyle = shopMsg.includes('たりない') ? '#ff6666':'#66ff66';
@@ -888,10 +899,12 @@ function ensureInit() {
 }
 
 // ---- loop ----
+let lastScene = -1;
 function loop() {
   ensureInit();
   update();
   draw();
+  if (scene !== lastScene) { updateButtonLabels(); lastScene = scene; }
   requestAnimationFrame(loop);
 }
 loop();
