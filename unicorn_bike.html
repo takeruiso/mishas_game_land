@@ -133,21 +133,38 @@ function setupBtn(id, onDown, onUp) {
   el.addEventListener('pointerup', e => { e.preventDefault(); onUp && onUp(); });
   el.addEventListener('pointercancel', e => { onUp && onUp(); });
 }
-setupBtn('btnL', ()=>btnLHeld=true, ()=>btnLHeld=false);
-setupBtn('btnR', ()=>btnRHeld=true, ()=>btnRHeld=false);
+setupBtn('btnL', ()=>{
+  if (scene===SCENE.SHOP_MAC||scene===SCENE.SHOP_PIZZA) { selectedItem=Math.max(0,selectedItem-1); }
+  else btnLHeld=true;
+}, ()=>btnLHeld=false);
+setupBtn('btnR', ()=>{
+  if (scene===SCENE.SHOP_MAC||scene===SCENE.SHOP_PIZZA) {
+    const max=(scene===SCENE.SHOP_MAC?MAC_MENU:PIZZA_MENU).length-1;
+    selectedItem=Math.min(max,selectedItem+1);
+  } else btnRHeld=true;
+}, ()=>btnRHeld=false);
 setupBtn('btnA', ()=>handleAction());
 
 // ---- shop menu selection ----
 let selectedItem = 0;
 document.addEventListener('keydown', e => {
   if (scene === SCENE.SHOP_MAC || scene === SCENE.SHOP_PIZZA) {
-    if (e.key === 'ArrowUp') selectedItem = Math.max(0, selectedItem-1);
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') selectedItem = Math.max(0, selectedItem-1);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
       const max = (scene===SCENE.SHOP_MAC ? MAC_MENU : PIZZA_MENU).length - 1;
       selectedItem = Math.min(max, selectedItem+1);
     }
+    if (e.key === 'Escape') closeShop();
   }
 });
+
+function closeShop() {
+  const prevScene = scene === SCENE.SHOP_MAC ? SCENE.RIDING : SCENE.RIDING2;
+  scene = prevScene;
+  worldX -= 300; // 少し戻る
+  if (worldX < 0) worldX = 0;
+  shopMsg = '';
+}
 
 const MAC_MENU = [
   { name: 'ハンバーガー 🍔', price: 5 },
@@ -192,20 +209,19 @@ function buyItem(menu, nextScene) {
 }
 
 // ---- world generation ----
+// coins store wyAbove = distance above ground, computed fresh each frame
 function spawnInitialCoins() {
   coins = [];
   for (let i = 0; i < 20; i++) {
-    coins.push({ wx: 300 + i * 120 + Math.random()*60, wy: groundY() - 60 - Math.random()*80, collected: false });
+    coins.push({ wx: 300 + i * 120 + Math.random()*60, wyAbove: 10 + Math.random()*40, collected: false });
   }
   bikeObj = { wx: 500, collected: false };
 }
 
 function spawnCoins2() {
-  // second stretch coins for pizza shop
   for (let i = 0; i < 15; i++) {
-    coins.push({ wx: worldX + 400 + i * 130 + Math.random()*60, wy: groundY() - 60 - Math.random()*80, collected: false });
+    coins.push({ wx: worldX + 400 + i * 130 + Math.random()*60, wyAbove: 10 + Math.random()*40, collected: false });
   }
-  // more decos already handled
 }
 
 function spawnDecos() {
@@ -285,9 +301,8 @@ function update() {
     // collect coins
     for (const c of coins) {
       if (c.collected) continue;
-      const cx = c.wx - scrollX;
-      const cy = c.wy;
-      if (Math.abs(worldX - c.wx) < 40 && Math.abs(player.y - cy) < 50) {
+      const cy = gY - c.wyAbove;
+      if (Math.abs(worldX - c.wx) < 50 && Math.abs(player.y - cy) < 80) {
         c.collected = true;
         money++;
         coinAnim.push({ x: player.x, y: player.y - 30, timer: 40, dy: -2 });
@@ -388,12 +403,13 @@ function draw() {
     if (c.collected) continue;
     const cx = c.wx - scrollX;
     if (cx < -30 || cx > W+30) continue;
+    const cy = gY - c.wyAbove;
     const bob = Math.sin(Date.now()/300 + c.wx)*4;
     ctx.save();
     ctx.shadowColor='#ffe066';
     ctx.shadowBlur=10;
     ctx.font='1.4rem serif';
-    ctx.fillText('🪙', cx-10, c.wy + bob);
+    ctx.fillText('🪙', cx-10, cy + bob);
     ctx.restore();
   }
 
@@ -727,9 +743,12 @@ function drawIntro() {
   }
 }
 
+// shop back button hit area (set during draw, used in tap handler)
+let shopBackBtn = null;
+
 function drawShopMenu(title, menu) {
   const W=canvas.width, H=canvas.height;
-  const mw=320, mh=300;
+  const mw=320, mh=340;
   const mx=(W-mw)/2, my=(H-mh)/2;
 
   ctx.fillStyle='rgba(0,0,20,0.7)';
@@ -751,7 +770,7 @@ function drawShopMenu(title, menu) {
 
   for (let i=0;i<menu.length;i++) {
     const item=menu[i];
-    const iy=my+100+i*56;
+    const iy=my+105+i*56;
     const selected = i===selectedItem;
     ctx.fillStyle = selected ? 'rgba(255,220,0,0.25)' : 'rgba(255,255,255,0.05)';
     ctx.beginPath(); ctx.roundRect(mx+20, iy-28, mw-40, 44, 10); ctx.fill();
@@ -764,10 +783,21 @@ function drawShopMenu(title, menu) {
     ctx.fillText(`${item.name}　${item.price}えん`, W/2, iy+2);
   }
 
+  // back button
+  const bbx=mx+20, bby=my+mh-64, bbw=mw-40, bbh=40;
+  shopBackBtn = { x:bbx, y:bby, w:bbw, h:bbh };
+  ctx.fillStyle='rgba(255,100,100,0.2)';
+  ctx.strokeStyle='rgba(255,100,100,0.7)';
+  ctx.lineWidth=2;
+  ctx.beginPath(); ctx.roundRect(bbx,bby,bbw,bbh,10); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#ffaaaa';
+  ctx.font='bold 16px sans-serif';
   ctx.textAlign='center';
-  ctx.fillStyle='rgba(255,255,255,0.5)';
-  ctx.font='14px sans-serif';
-  ctx.fillText('↑↓ でえらぶ　「かう！」ボタンで購入', W/2, my+mh-18);
+  ctx.fillText('🚲 もどる（おかねをあつめよう）', W/2, bby+26);
+
+  ctx.fillStyle='rgba(255,255,255,0.4)';
+  ctx.font='13px sans-serif';
+  ctx.fillText('⬅️➡️ でえらぶ　「かう！」で購入', W/2, my+mh-72);
 
   if (shopMsgTimer>0) {
     ctx.fillStyle = shopMsg.includes('たりない') ? '#ff6666':'#66ff66';
@@ -812,13 +842,23 @@ function drawEnd() {
 }
 
 // ---- tap to advance / restart ----
-canvas.addEventListener('pointerdown', () => {
+canvas.addEventListener('pointerdown', e => {
+  const rect = canvas.getBoundingClientRect();
+  const tx = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const ty = (e.clientY - rect.top) * (canvas.height / rect.height);
+
   if (scene === SCENE.INTRO) {
     scene = SCENE.FIND_BIKE;
     return;
   }
   if (scene === SCENE.END) {
     resetGame(); return;
+  }
+  if ((scene === SCENE.SHOP_MAC || scene === SCENE.SHOP_PIZZA) && shopBackBtn) {
+    const b = shopBackBtn;
+    if (tx >= b.x && tx <= b.x+b.w && ty >= b.y && ty <= b.y+b.h) {
+      closeShop();
+    }
   }
 });
 
@@ -831,19 +871,25 @@ function resetGame() {
   money = 0; coins = []; coinAnim = []; decos = [];
   bikeObj = null;
   boughtMac=false; boughtPizza=false;
-  shopMsg=''; shopMsgTimer=0;
+  shopMsg=''; shopMsgTimer=0; shopBackBtn=null;
   cloudList=null;
   spawnInitialCoins();
   spawnDecos();
 }
 
 // ---- init ----
-player.y = groundY();
-spawnInitialCoins();
-spawnDecos();
+let initialized = false;
+function ensureInit() {
+  if (initialized) return;
+  initialized = true;
+  player.y = groundY();
+  spawnInitialCoins();
+  spawnDecos();
+}
 
 // ---- loop ----
 function loop() {
+  ensureInit();
   update();
   draw();
   requestAnimationFrame(loop);
