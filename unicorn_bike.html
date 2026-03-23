@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🦄 ユニコーンじてんしゃ</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: #1a0040;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Segoe UI', 'Hiragino Sans', sans-serif;
+}
+canvas { display: block; flex: 1; width: 100%; }
+.controls {
+  background: #1a0040;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px 14px;
+  height: 100px;
+  flex-shrink: 0;
+  gap: 10px;
+}
+.ctrl-btn {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,.3);
+  font-size: 2rem;
+  cursor: pointer;
+  background: rgba(255,255,255,.12);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: transform .08s, background .08s;
+}
+.ctrl-btn:active { transform: scale(.85); background: rgba(255,255,255,.3); }
+.action-btn {
+  width: 90px;
+  height: 72px;
+  border-radius: 20px;
+  border: 3px solid rgba(255,220,0,.5);
+  font-size: 1.2rem;
+  cursor: pointer;
+  background: rgba(255,220,0,.2);
+  color: #ffe066;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: transform .08s, background .08s;
+}
+.action-btn:active { transform: scale(.85); background: rgba(255,220,0,.4); }
+.ctrl-side { display: flex; gap: 10px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="controls" id="controls">
+  <div class="ctrl-side">
+    <button class="ctrl-btn" id="btnL">⬅️</button>
+    <button class="ctrl-btn" id="btnR">➡️</button>
+  </div>
+  <button class="action-btn" id="btnA">かう！</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// ---- resize ----
+function resize() {
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ---- game state ----
+const SCENE = { INTRO:0, FIND_BIKE:1, RIDING:2, SHOP_MAC:3, RIDING2:4, SHOP_PIZZA:5, END:6 };
+let scene = SCENE.INTRO;
+let introTimer = 0;
+
+// player
+const player = { x:100, y:0, vy:0, onGround:false, facingRight:true, hasBike:false };
+
+// scrolling
+let scrollX = 0;
+let worldX = 0; // player's world position
+
+// coins
+let coins = [];
+let money = 0;
+let coinAnim = [];
+
+// obstacles / decorations
+let decos = [];
+let bikeObj = null; // the findable bike
+
+// shop state
+let shopPhase = 0; // 0=arrive, 1=menu, 2=bought
+let shopItems = [];
+let shopMsg = '';
+let shopMsgTimer = 0;
+let boughtMac = false;
+let boughtPizza = false;
+
+// keys
+const keys = {};
+let btnLHeld = false, btnRHeld = false;
+
+// ---- input ----
+document.addEventListener('keydown', e => keys[e.key] = true);
+document.addEventListener('keyup', e => keys[e.key] = false);
+
+function setupBtn(id, onDown, onUp) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('pointerdown', e => { e.preventDefault(); onDown(); });
+  el.addEventListener('pointerup', e => { e.preventDefault(); onUp && onUp(); });
+  el.addEventListener('pointercancel', e => { onUp && onUp(); });
+}
+setupBtn('btnL', ()=>btnLHeld=true, ()=>btnLHeld=false);
+setupBtn('btnR', ()=>btnRHeld=true, ()=>btnRHeld=false);
+setupBtn('btnA', ()=>handleAction());
+
+// ---- shop menu selection ----
+let selectedItem = 0;
+document.addEventListener('keydown', e => {
+  if (scene === SCENE.SHOP_MAC || scene === SCENE.SHOP_PIZZA) {
+    if (e.key === 'ArrowUp') selectedItem = Math.max(0, selectedItem-1);
+    if (e.key === 'ArrowDown') {
+      const max = (scene===SCENE.SHOP_MAC ? MAC_MENU : PIZZA_MENU).length - 1;
+      selectedItem = Math.min(max, selectedItem+1);
+    }
+  }
+});
+
+const MAC_MENU = [
+  { name: 'ハンバーガー 🍔', price: 5 },
+  { name: 'ポテト 🍟', price: 3 },
+  { name: 'ジュース 🥤', price: 2 },
+];
+const PIZZA_MENU = [
+  { name: 'ピザ 🍕', price: 8 },
+  { name: 'サラダ 🥗', price: 4 },
+  { name: 'アイス 🍦', price: 3 },
+];
+
+function handleAction() {
+  if (scene === SCENE.INTRO || scene === SCENE.FIND_BIKE) return;
+  if (scene === SCENE.SHOP_MAC) {
+    buyItem(MAC_MENU, SCENE.RIDING2);
+  } else if (scene === SCENE.SHOP_PIZZA) {
+    buyItem(PIZZA_MENU, SCENE.END);
+  }
+}
+
+function buyItem(menu, nextScene) {
+  const item = menu[selectedItem];
+  if (money >= item.price) {
+    money -= item.price;
+    shopMsg = `${item.name} を かった！ ✨`;
+    shopMsgTimer = 120;
+    setTimeout(()=>{
+      scene = nextScene;
+      if (nextScene === SCENE.RIDING2) {
+        boughtMac = true;
+        spawnCoins2();
+        spawnDecos2();
+      } else {
+        boughtPizza = true;
+      }
+    }, 2000);
+  } else {
+    shopMsg = 'おかねが たりない！ 💸';
+    shopMsgTimer = 90;
+  }
+}
+
+// ---- world generation ----
+function spawnInitialCoins() {
+  coins = [];
+  for (let i = 0; i < 20; i++) {
+    coins.push({ wx: 300 + i * 120 + Math.random()*60, wy: groundY() - 60 - Math.random()*80, collected: false });
+  }
+  bikeObj = { wx: 500, collected: false };
+}
+
+function spawnCoins2() {
+  // second stretch coins for pizza shop
+  for (let i = 0; i < 15; i++) {
+    coins.push({ wx: worldX + 400 + i * 130 + Math.random()*60, wy: groundY() - 60 - Math.random()*80, collected: false });
+  }
+  // more decos already handled
+}
+
+function spawnDecos() {
+  decos = [];
+  const types = ['🌳','🌸','🏠','⭐','🌈','🌺','🌻'];
+  for (let i = 0; i < 30; i++) {
+    decos.push({ wx: 200 + i*180 + Math.random()*80, type: types[Math.floor(Math.random()*types.length)], y: groundY()-20-Math.random()*30 });
+  }
+}
+
+function spawnDecos2() {
+  const types = ['🏘️','🌴','🌟','🦋','🌙'];
+  for (let i = 0; i < 20; i++) {
+    decos.push({ wx: worldX + 400 + i*200 + Math.random()*100, type: types[Math.floor(Math.random()*types.length)], y: groundY()-20-Math.random()*30 });
+  }
+}
+
+function groundY() { return canvas.height - 100; }
+
+// ---- physics & movement ----
+const SPEED = 4;
+const BIKE_SPEED = 6;
+const GRAVITY = 0.5;
+const JUMP_V = -12;
+
+function update() {
+  const W = canvas.width;
+  const gY = groundY();
+  const speed = player.hasBike ? BIKE_SPEED : SPEED;
+
+  if (scene === SCENE.INTRO) {
+    introTimer++;
+    if (introTimer > 180) scene = SCENE.FIND_BIKE;
+    return;
+  }
+
+  if (scene === SCENE.FIND_BIKE || scene === SCENE.RIDING || scene === SCENE.RIDING2) {
+    // movement
+    const left = keys['ArrowLeft'] || btnLHeld;
+    const right = keys['ArrowRight'] || btnRHeld;
+
+    if (right) { worldX += speed; player.facingRight = true; }
+    if (left && worldX > 0) { worldX -= speed * 0.5; player.facingRight = false; }
+
+    // gravity
+    player.vy += GRAVITY;
+    player.y += player.vy;
+    if (player.y >= gY) {
+      player.y = gY;
+      player.vy = 0;
+      player.onGround = true;
+    } else {
+      player.onGround = false;
+    }
+
+    // jump (spacebar)
+    if ((keys[' '] || keys['ArrowUp']) && player.onGround) {
+      player.vy = JUMP_V;
+    }
+
+    // camera: keep player at ~30% from left
+    scrollX = worldX - W * 0.3;
+    if (scrollX < 0) scrollX = 0;
+    player.x = worldX - scrollX;
+
+    // find bike
+    if (scene === SCENE.FIND_BIKE && bikeObj && !bikeObj.collected) {
+      const bx = bikeObj.wx - scrollX;
+      if (Math.abs(worldX - bikeObj.wx) < 60) {
+        bikeObj.collected = true;
+        player.hasBike = true;
+        scene = SCENE.RIDING;
+        spawnCoins2 && null; // no-op here, coins already spawned
+      }
+    }
+
+    // collect coins
+    for (const c of coins) {
+      if (c.collected) continue;
+      const cx = c.wx - scrollX;
+      const cy = c.wy;
+      if (Math.abs(worldX - c.wx) < 40 && Math.abs(player.y - cy) < 50) {
+        c.collected = true;
+        money++;
+        coinAnim.push({ x: player.x, y: player.y - 30, timer: 40, dy: -2 });
+      }
+    }
+
+    // check arrive at Mac (world pos ~2800)
+    const macWX = 2800;
+    if (scene === SCENE.RIDING && worldX >= macWX) {
+      worldX = macWX;
+      scene = SCENE.SHOP_MAC;
+      selectedItem = 0;
+      shopMsg = '';
+    }
+
+    // check arrive at Pizza (world pos ~5200)
+    const pizzaWX = 5200;
+    if (scene === SCENE.RIDING2 && worldX >= pizzaWX) {
+      worldX = pizzaWX;
+      scene = SCENE.SHOP_PIZZA;
+      selectedItem = 0;
+      shopMsg = '';
+    }
+  }
+
+  // coin anim
+  for (const a of coinAnim) { a.y += a.dy; a.timer--; }
+  coinAnim = coinAnim.filter(a => a.timer > 0);
+
+  // shop msg timer
+  if (shopMsgTimer > 0) shopMsgTimer--;
+}
+
+// ---- draw ----
+function draw() {
+  const W = canvas.width, H = canvas.height;
+  const gY = groundY();
+
+  // sky gradient
+  const sky = ctx.createLinearGradient(0,0,0,gY);
+  sky.addColorStop(0,'#0a0028');
+  sky.addColorStop(0.5,'#1a006a');
+  sky.addColorStop(1,'#6600aa');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0,0,W,gY);
+
+  // ground
+  ctx.fillStyle = '#2d8a00';
+  ctx.fillRect(0, gY, W, H-gY);
+  ctx.fillStyle = '#3aab00';
+  ctx.fillRect(0, gY, W, 14);
+
+  // road (when has bike)
+  if (player.hasBike || scene >= SCENE.RIDING) {
+    ctx.fillStyle = '#555';
+    ctx.fillRect(0, gY+4, W, 40);
+    // road markings
+    for (let x = (-scrollX % 120); x < W; x += 120) {
+      ctx.fillStyle = '#ffe066';
+      ctx.fillRect(x, gY+22, 60, 6);
+    }
+  }
+
+  // clouds
+  drawClouds();
+
+  // decorations
+  for (const d of decos) {
+    const dx = d.wx - scrollX;
+    if (dx < -60 || dx > W+60) continue;
+    ctx.font = '2rem serif';
+    ctx.fillText(d.type, dx, d.y);
+  }
+
+  // distance markers
+  drawDistanceMarkers();
+
+  // bike object
+  if (bikeObj && !bikeObj.collected) {
+    const bx = bikeObj.wx - scrollX;
+    if (bx > -60 && bx < W+60) {
+      // sparkle
+      if (Math.floor(Date.now()/300)%2===0) {
+        ctx.font='1.2rem serif'; ctx.fillText('✨',bx-10,gY-80);
+        ctx.fillText('✨',bx+30,gY-90);
+      }
+      drawBike(bx, gY-10, 0.9, false);
+      ctx.fillStyle='#ffe066';
+      ctx.font='bold 14px sans-serif';
+      ctx.textAlign='center';
+      ctx.fillText('じてんしゃ！', bx+20, gY-60);
+      ctx.textAlign='left';
+    }
+  }
+
+  // coins
+  for (const c of coins) {
+    if (c.collected) continue;
+    const cx = c.wx - scrollX;
+    if (cx < -30 || cx > W+30) continue;
+    const bob = Math.sin(Date.now()/300 + c.wx)*4;
+    ctx.save();
+    ctx.shadowColor='#ffe066';
+    ctx.shadowBlur=10;
+    ctx.font='1.4rem serif';
+    ctx.fillText('🪙', cx-10, c.wy + bob);
+    ctx.restore();
+  }
+
+  // coin popup
+  for (const a of coinAnim) {
+    ctx.globalAlpha = a.timer/40;
+    ctx.fillStyle='#ffe066';
+    ctx.font='bold 20px sans-serif';
+    ctx.fillText('+1', a.x, a.y);
+    ctx.globalAlpha=1;
+  }
+
+  // shops
+  drawShops();
+
+  // player
+  drawPlayer();
+
+  // HUD
+  drawHUD();
+
+  // scene overlays
+  if (scene === SCENE.INTRO) drawIntro();
+  if (scene === SCENE.SHOP_MAC) drawShopMenu('🍔 マクドナルド', MAC_MENU);
+  if (scene === SCENE.SHOP_PIZZA) drawShopMenu('🍕 ピザやさん', PIZZA_MENU);
+  if (scene === SCENE.END) drawEnd();
+}
+
+let cloudList = null;
+function drawClouds() {
+  if (!cloudList) {
+    cloudList = [];
+    for (let i=0;i<8;i++) cloudList.push({wx:i*600+Math.random()*300, y:40+Math.random()*80, s:0.8+Math.random()*0.6});
+  }
+  for (const cl of cloudList) {
+    cl.wx -= 0.3;
+    if (cl.wx < -200) cl.wx = canvas.width + 200;
+    const cx = cl.wx;
+    ctx.save();
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle='white';
+    ctx.beginPath();
+    ctx.ellipse(cx, cl.y, 60*cl.s, 25*cl.s, 0, 0, Math.PI*2);
+    ctx.ellipse(cx-35*cl.s, cl.y+5*cl.s, 35*cl.s, 20*cl.s, 0, 0, Math.PI*2);
+    ctx.ellipse(cx+35*cl.s, cl.y+8*cl.s, 40*cl.s, 18*cl.s, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawDistanceMarkers() {
+  const W = canvas.width;
+  const gY = groundY();
+  // Mac at 2800, Pizza at 5200
+  const spots = [
+    { wx: 2800, label: '🍔 マック', color: '#ff0' },
+    { wx: 5200, label: '🍕 ピザ', color: '#ff8c00' },
+  ];
+  for (const s of spots) {
+    const sx = s.wx - scrollX;
+    if (sx < 0 || sx > W) continue;
+    // sign post
+    ctx.fillStyle = s.color;
+    ctx.fillRect(sx-2, gY-90, 4, 70);
+    ctx.fillStyle = s.color;
+    ctx.beginPath();
+    ctx.moveTo(sx-40, gY-130);
+    ctx.lineTo(sx+60, gY-130);
+    ctx.lineTo(sx+60, gY-100);
+    ctx.lineTo(sx-40, gY-100);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle='#000';
+    ctx.font='bold 13px sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText(s.label, sx+10, gY-111);
+    ctx.textAlign='left';
+  }
+}
+
+function drawShops() {
+  const W = canvas.width;
+  const gY = groundY();
+  // Mac building
+  const macX = 2800 - scrollX;
+  if (macX > -200 && macX < W+200) drawMacBuilding(macX, gY);
+  // Pizza building
+  const pizzaX = 5200 - scrollX;
+  if (pizzaX > -200 && pizzaX < W+200) drawPizzaBuilding(pizzaX, gY);
+}
+
+function drawMacBuilding(x, gY) {
+  // building
+  ctx.fillStyle='#e80000';
+  ctx.fillRect(x-20, gY-160, 140, 160);
+  // roof
+  ctx.fillStyle='#aa0000';
+  ctx.fillRect(x-30, gY-170, 160, 20);
+  // golden arches
+  ctx.strokeStyle='#FFD700';
+  ctx.lineWidth=8;
+  ctx.beginPath();
+  ctx.arc(x+30, gY-100, 25, Math.PI, 0, false);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x+70, gY-100, 25, Math.PI, 0, false);
+  ctx.stroke();
+  // door
+  ctx.fillStyle='#FFD700';
+  ctx.fillRect(x+40, gY-60, 20, 60);
+  // windows
+  ctx.fillStyle='#87CEEB';
+  ctx.fillRect(x, gY-140, 30, 30);
+  ctx.fillRect(x+70, gY-140, 30, 30);
+  // sign
+  ctx.fillStyle='#FFD700';
+  ctx.font='bold 18px sans-serif';
+  ctx.textAlign='center';
+  ctx.fillText("McDonald's", x+50, gY-175);
+  ctx.textAlign='left';
+}
+
+function drawPizzaBuilding(x, gY) {
+  ctx.fillStyle='#ff6600';
+  ctx.fillRect(x-20, gY-150, 140, 150);
+  // roof triangle
+  ctx.fillStyle='#cc4400';
+  ctx.beginPath();
+  ctx.moveTo(x-40, gY-150);
+  ctx.lineTo(x+50, gY-200);
+  ctx.lineTo(x+140, gY-150);
+  ctx.closePath();
+  ctx.fill();
+  // pizza sign
+  ctx.font='3rem serif';
+  ctx.textAlign='center';
+  ctx.fillText('🍕', x+50, gY-100);
+  ctx.textAlign='left';
+  // door
+  ctx.fillStyle='#5c3317';
+  ctx.fillRect(x+40, gY-60, 25, 60);
+  // sign
+  ctx.fillStyle='#ffe066';
+  ctx.font='bold 16px sans-serif';
+  ctx.textAlign='center';
+  ctx.fillText('ピザやさん', x+50, gY-165);
+  ctx.textAlign='left';
+}
+
+function drawBike(x, y, scale, moving) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  const t = Date.now()/200;
+  // wheels
+  ctx.strokeStyle='#888';
+  ctx.lineWidth=4;
+  const wx = moving ? Math.sin(t)*2 : 0;
+  ctx.beginPath(); ctx.arc(-25, 0, 18, 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(25, 0, 18, 0, Math.PI*2); ctx.stroke();
+  // spokes
+  ctx.lineWidth=2;
+  for (let i=0;i<4;i++) {
+    const ang = t + i*Math.PI/2;
+    ctx.beginPath();
+    ctx.moveTo(-25 + Math.cos(ang)*18, Math.sin(ang)*18);
+    ctx.lineTo(-25 - Math.cos(ang)*18, -Math.sin(ang)*18);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(25 + Math.cos(ang)*18, Math.sin(ang)*18);
+    ctx.lineTo(25 - Math.cos(ang)*18, -Math.sin(ang)*18);
+    ctx.stroke();
+  }
+  // frame
+  ctx.strokeStyle='#f55';
+  ctx.lineWidth=4;
+  ctx.beginPath();
+  ctx.moveTo(-25,0); ctx.lineTo(0,-25); ctx.lineTo(25,0);
+  ctx.moveTo(0,-25); ctx.lineTo(0,-10);
+  ctx.moveTo(-25,0); ctx.lineTo(5,-10);
+  ctx.stroke();
+  // handlebar
+  ctx.strokeStyle='#aaa';
+  ctx.beginPath();
+  ctx.moveTo(20,-25); ctx.lineTo(32,-28); ctx.moveTo(32,-28); ctx.lineTo(32,-20);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawPlayer() {
+  const W = canvas.width, gY = groundY();
+  const px = player.x, py = player.y;
+  const dir = player.facingRight ? 1 : -1;
+  const t = Date.now()/200;
+
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.scale(dir, 1);
+
+  if (player.hasBike) {
+    // draw bike under unicorn
+    drawBike(0, -12, 0.8, true);
+  }
+
+  // body (unicorn)
+  // legs
+  if (player.hasBike) {
+    // pedalling legs
+    ctx.fillStyle='#b566ff';
+    const la = Math.sin(t)*0.5;
+    ctx.save();
+    ctx.translate(-10, -30);
+    ctx.rotate(la); ctx.fillRect(-5,-15,10,25); ctx.restore();
+    ctx.save();
+    ctx.translate(5, -30);
+    ctx.rotate(-la); ctx.fillRect(-5,-15,10,25); ctx.restore();
+  } else {
+    // walking legs
+    ctx.fillStyle='#b566ff';
+    const la = player.onGround ? Math.sin(t)*0.4 : 0;
+    ctx.save(); ctx.translate(-12,-20); ctx.rotate(la);  ctx.fillRect(-4,-18,8,22); ctx.restore();
+    ctx.save(); ctx.translate(-4, -20); ctx.rotate(-la); ctx.fillRect(-4,-18,8,22); ctx.restore();
+    ctx.save(); ctx.translate(4,  -20); ctx.rotate(la);  ctx.fillRect(-4,-18,8,22); ctx.restore();
+    ctx.save(); ctx.translate(12, -20); ctx.rotate(-la); ctx.fillRect(-4,-18,8,22); ctx.restore();
+  }
+
+  // torso
+  ctx.fillStyle='#cc88ff';
+  ctx.beginPath();
+  ctx.ellipse(0, -50, 22, 16, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // neck
+  ctx.fillStyle='#cc88ff';
+  ctx.fillRect(-6, -80, 12, 28);
+
+  // head
+  ctx.fillStyle='#dda0ff';
+  ctx.beginPath();
+  ctx.ellipse(4, -92, 16, 13, -0.2, 0, Math.PI*2);
+  ctx.fill();
+
+  // horn
+  ctx.fillStyle='#ffe066';
+  ctx.beginPath();
+  ctx.moveTo(8, -103); ctx.lineTo(20, -120); ctx.lineTo(12, -102);
+  ctx.fill();
+
+  // eye
+  ctx.fillStyle='#222';
+  ctx.beginPath(); ctx.arc(12, -93, 4, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle='white';
+  ctx.beginPath(); ctx.arc(13, -94, 1.5, 0, Math.PI*2); ctx.fill();
+
+  // mane
+  const maneColors = ['#ff66cc','#ff9900','#66ff66','#66ccff','#ff66ff'];
+  for (let i=0;i<5;i++) {
+    ctx.fillStyle = maneColors[i];
+    const mx = -8 + i*3;
+    const my = -100 - i*3 + Math.sin(t+i)*3;
+    ctx.beginPath(); ctx.arc(mx, my, 5, 0, Math.PI*2); ctx.fill();
+  }
+
+  // tail
+  for (let i=0;i<5;i++) {
+    ctx.fillStyle = maneColors[i];
+    const tx2 = -22 - i*4;
+    const ty = -48 + i*5 + Math.sin(t*1.5+i)*5;
+    ctx.beginPath(); ctx.arc(tx2, ty, 5, 0, Math.PI*2); ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawHUD() {
+  const W = canvas.width;
+  // money
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.5)';
+  ctx.beginPath();
+  ctx.roundRect(10,10,160,44,12);
+  ctx.fill();
+  ctx.font='bold 22px sans-serif';
+  ctx.fillStyle='#ffe066';
+  ctx.fillText(`🪙 ${money} えん`, 20, 40);
+  ctx.restore();
+
+  // progress bar
+  const macWX=2800, pizzaWX=5200;
+  const goal = scene < SCENE.RIDING2 ? macWX : pizzaWX;
+  const startWX = scene < SCENE.RIDING2 ? 0 : 2800;
+  const prog = Math.min(1, Math.max(0, (worldX - startWX)/(goal-startWX)));
+  const bw=180, bh=14, bx=W/2-bw/2, by=14;
+  ctx.fillStyle='rgba(0,0,0,0.4)';
+  ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,7); ctx.fill();
+  ctx.fillStyle='#ffe066';
+  ctx.beginPath(); ctx.roundRect(bx,by,bw*prog,bh,7); ctx.fill();
+  const icon = scene < SCENE.RIDING2 ? '🍔' : '🍕';
+  ctx.font='1rem serif'; ctx.fillText(icon, bx+bw+4, by+12);
+}
+
+function drawIntro() {
+  const W=canvas.width, H=canvas.height;
+  ctx.fillStyle='rgba(0,0,0,0.65)';
+  ctx.fillRect(0,0,W,H);
+
+  ctx.save();
+  ctx.textAlign='center';
+  const pulse = 1 + Math.sin(Date.now()/300)*0.05;
+  ctx.font=`bold ${Math.floor(48*pulse)}px sans-serif`;
+  ctx.fillStyle='#ffe066';
+  ctx.fillText('🦄 ユニコーンじてんしゃ', W/2, H/2-60);
+  ctx.font='24px sans-serif';
+  ctx.fillStyle='white';
+  ctx.fillText('じてんしゃをみつけて', W/2, H/2);
+  ctx.fillText('おかねをあつめよう！', W/2, H/2+40);
+  ctx.fillText('🍔 マックと 🍕 ピザやで', W/2, H/2+80);
+  ctx.fillText('かいものしよう！', W/2, H/2+115);
+  ctx.font='20px sans-serif';
+  ctx.fillStyle='#aaa';
+  ctx.fillText('← → で うごく　スペースで ジャンプ', W/2, H/2+160);
+  ctx.restore();
+
+  if (introTimer > 150) {
+    ctx.save();
+    ctx.textAlign='center';
+    ctx.font='bold 22px sans-serif';
+    ctx.fillStyle = Math.floor(Date.now()/500)%2===0 ? '#ffe066':'white';
+    ctx.fillText('タップして はじめよう！', W/2, H/2+200);
+    ctx.restore();
+  }
+}
+
+function drawShopMenu(title, menu) {
+  const W=canvas.width, H=canvas.height;
+  const mw=320, mh=300;
+  const mx=(W-mw)/2, my=(H-mh)/2;
+
+  ctx.fillStyle='rgba(0,0,20,0.7)';
+  ctx.fillRect(0,0,W,H);
+
+  ctx.fillStyle='#2a0060';
+  ctx.strokeStyle='#ffe066';
+  ctx.lineWidth=3;
+  ctx.beginPath(); ctx.roundRect(mx,my,mw,mh,20); ctx.fill(); ctx.stroke();
+
+  ctx.textAlign='center';
+  ctx.fillStyle='#ffe066';
+  ctx.font='bold 22px sans-serif';
+  ctx.fillText(title, W/2, my+40);
+
+  ctx.fillStyle='#aaa';
+  ctx.font='16px sans-serif';
+  ctx.fillText(`もっているおかね: 🪙${money}えん`, W/2, my+65);
+
+  for (let i=0;i<menu.length;i++) {
+    const item=menu[i];
+    const iy=my+100+i*56;
+    const selected = i===selectedItem;
+    ctx.fillStyle = selected ? 'rgba(255,220,0,0.25)' : 'rgba(255,255,255,0.05)';
+    ctx.beginPath(); ctx.roundRect(mx+20, iy-28, mw-40, 44, 10); ctx.fill();
+    if (selected) {
+      ctx.strokeStyle='#ffe066'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.roundRect(mx+20, iy-28, mw-40, 44, 10); ctx.stroke();
+    }
+    ctx.fillStyle = selected ? '#ffe066':'white';
+    ctx.font=`${selected?'bold ':''}18px sans-serif`;
+    ctx.fillText(`${item.name}　${item.price}えん`, W/2, iy+2);
+  }
+
+  ctx.textAlign='center';
+  ctx.fillStyle='rgba(255,255,255,0.5)';
+  ctx.font='14px sans-serif';
+  ctx.fillText('↑↓ でえらぶ　「かう！」ボタンで購入', W/2, my+mh-18);
+
+  if (shopMsgTimer>0) {
+    ctx.fillStyle = shopMsg.includes('たりない') ? '#ff6666':'#66ff66';
+    ctx.font='bold 20px sans-serif';
+    ctx.fillText(shopMsg, W/2, my-24);
+  }
+  ctx.textAlign='left';
+}
+
+function drawEnd() {
+  const W=canvas.width, H=canvas.height;
+  ctx.fillStyle='rgba(0,0,0,0.7)';
+  ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle='#ffe066';
+  ctx.font='bold 40px sans-serif';
+  ctx.fillText('🎉 ゲームクリア！ 🎉', W/2, H/2-80);
+  ctx.fillStyle='white';
+  ctx.font='24px sans-serif';
+  ctx.fillText('ユニコーンは', W/2, H/2-20);
+  ctx.fillText('🍔 マックと 🍕 ピザを', W/2, H/2+20);
+  ctx.fillText('かいました！', W/2, H/2+60);
+  ctx.fillText(`のこりのおかね: 🪙${money}えん`, W/2, H/2+110);
+
+  // celebration emojis
+  const emojis=['🌟','✨','🎊','🌈','💖','🦄'];
+  const phase = Date.now()/800;
+  for (let i=0;i<emojis.length;i++) {
+    const ang = phase + i*(Math.PI*2/emojis.length);
+    const r=120;
+    const ex=W/2+Math.cos(ang)*r;
+    const ey=H/2+Math.sin(ang)*r*0.4;
+    ctx.font='2rem serif';
+    ctx.fillText(emojis[i], ex-15, ey+10);
+  }
+
+  // retry
+  ctx.font='bold 20px sans-serif';
+  ctx.fillStyle = Math.floor(Date.now()/600)%2===0 ? '#ffe066':'white';
+  ctx.fillText('タップして もう一回！', W/2, H/2+170);
+  ctx.textAlign='left';
+}
+
+// ---- tap to advance / restart ----
+canvas.addEventListener('pointerdown', () => {
+  if (scene === SCENE.INTRO) {
+    scene = SCENE.FIND_BIKE;
+    return;
+  }
+  if (scene === SCENE.END) {
+    resetGame(); return;
+  }
+});
+
+function resetGame() {
+  scene = SCENE.INTRO;
+  introTimer = 0;
+  worldX = 0; scrollX = 0;
+  player.x = 100; player.y = groundY();
+  player.vy = 0; player.hasBike = false; player.facingRight = true;
+  money = 0; coins = []; coinAnim = []; decos = [];
+  bikeObj = null;
+  boughtMac=false; boughtPizza=false;
+  shopMsg=''; shopMsgTimer=0;
+  cloudList=null;
+  spawnInitialCoins();
+  spawnDecos();
+}
+
+// ---- init ----
+player.y = groundY();
+spawnInitialCoins();
+spawnDecos();
+
+// ---- loop ----
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

@@ -402,6 +402,16 @@ const GAMES = [
     thumbnail: 'race',
   },
   {
+    id: 'unicorn-bike',
+    title: '🚲 ユニコーンじてんしゃ',
+    desc: 'じてんしゃをみつけて　おかねをあつめよう！🍔マックと🍕ピザやで　かいものしよう！',
+    url: 'unicorn_bike.html',
+    tags: ['スクロール', '3さい〜'],
+    badge: 'NEW!',
+    badgeClass: 'badge-new',
+    thumbnail: 'bike',
+  },
+  {
     id: 'parking-shop',
     title: '🛒 ユニコーンのおかいもの',
     desc: 'くるまにのった ユニコーンを うごかして こうていで おかいもの！ かいものリストを ぜんぶ かえたら クリア！',
@@ -1384,6 +1394,32 @@ function drawParkingThumb(ctx, w, h) {
   drawStarT(ctx, w*.5, h*.5, 4, '#fff');
 }
 
+function drawBikeThumb(ctx, w, h) {
+  // sky
+  const sky = ctx.createLinearGradient(0,0,0,h*0.7);
+  sky.addColorStop(0,'#0a0028'); sky.addColorStop(1,'#6600aa');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,w,h*0.7);
+  // ground
+  ctx.fillStyle='#2d8a00'; ctx.fillRect(0,h*0.7,w,h*0.3);
+  ctx.fillStyle='#555'; ctx.fillRect(0,h*0.7,w,h*0.15);
+  // road dashes
+  ctx.fillStyle='#ffe066';
+  for(let x=5;x<w;x+=30){ctx.fillRect(x,h*0.75,16,4);}
+  // coins
+  ctx.font=`${w*0.1}px serif`;
+  ctx.fillText('🪙',w*0.6,h*0.55);
+  ctx.fillText('🪙',w*0.75,h*0.48);
+  // unicorn on bike
+  ctx.font=`${w*0.28}px serif`;
+  ctx.fillText('🦄',w*0.08,h*0.72);
+  ctx.font=`${w*0.18}px serif`;
+  ctx.fillText('🚲',w*0.15,h*0.82);
+  // Mac & Pizza in distance
+  ctx.font=`${w*0.12}px serif`;
+  ctx.fillText('🍔',w*0.72,h*0.62);
+  ctx.fillText('🍕',w*0.86,h*0.58);
+}
+
 const thumbDrawers = {
   unicorn: drawUnicornThumb,
   coloring: drawColoringThumb,
@@ -1396,6 +1432,7 @@ const thumbDrawers = {
   trampoline: drawTrampolineThumb,
   parking: drawParkingThumb,
   race: drawRaceThumb,
+  bike: drawBikeThumb,
 };
 
 GAMES.forEach(game => {
